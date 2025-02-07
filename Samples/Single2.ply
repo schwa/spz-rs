@@ -1,0 +1,22 @@
+ply
+format ascii 1.0
+element vertex 1
+property float x
+property float y
+property float z
+property float rot_0
+property float rot_1
+property float rot_2
+property float rot_3
+property float scale_0
+property float scale_1
+property float scale_2
+property float opacity
+property float nx
+property float ny
+property float nz
+property float f_dc_0
+property float f_dc_1
+property float f_dc_2
+end_header
+100 200 -100 -0.0039215684 -0.0039215684 -0.0039215684 0.99997693 1 -1 1 0.93174934 0 0 0 0.96152765 0.4981411 0.22010915 
