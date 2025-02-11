@@ -1,4 +1,3 @@
-use crate::support::*;
 use anyhow::Result;
 use ply_rs::parser;
 use ply_rs::ply;
@@ -10,6 +9,8 @@ use ply_rs::writer::Writer;
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
 use vek::{Vec3, Vec4};
+
+use crate::support::{linear_to_log, linear_to_sph0, log_to_linear, sph0_to_linear};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct UnpackedGaussian {

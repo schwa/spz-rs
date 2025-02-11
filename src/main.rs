@@ -1,12 +1,13 @@
-mod unpacked_gaussian;
-use unpacked_gaussian::*;
+mod hilbert_curve;
 mod spz;
-use spz::*;
 mod support;
-
-use std::path::PathBuf;
+mod unpacked_gaussian;
 
 use clap::{Parser, Subcommand};
+use hilbert_curve::hilbert_sort;
+use spz::{load_spz, write_spz};
+use std::path::PathBuf;
+use unpacked_gaussian::{load_ply, write_ply};
 
 #[derive(Subcommand)]
 enum Commands {
@@ -23,6 +24,14 @@ enum Commands {
         #[arg(short, long)]
         /// Do not compress the output. This option will not produce a valid .spz file.
         uncompressed: bool,
+
+        #[arg(short, long, default_value = "false")]
+        /// Do not include spherical harmonics in the output.
+        skip_spherical_harmonics: bool,
+
+        #[arg(short, long, default_value = "false")]
+        /// Sort the gaussians using a hilbert curve. This may improve compression. Experimental.
+        use_hilbert_sort: bool,
     },
 
     /// Convert a .spz file to a .ply file
@@ -55,12 +64,19 @@ fn main() {
             input,
             output,
             uncompressed,
+            skip_spherical_harmonics,
+            use_hilbert_sort,
         } => {
-            let gaussians = load_ply(&input).unwrap();
+            let mut gaussians = load_ply(&input).unwrap();
             if gaussians.len() == 1 {
                 println!("{:?}", gaussians[0]);
             }
-            write_spz(gaussians, &output, !uncompressed).unwrap();
+
+            if use_hilbert_sort {
+                gaussians = hilbert_sort(&gaussians, |g| g.position);
+            }
+
+            write_spz(gaussians, &output, !uncompressed, skip_spherical_harmonics).unwrap();
         }
         Commands::Decode {
             input,

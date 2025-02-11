@@ -1,5 +1,3 @@
-use crate::support::*;
-use crate::unpacked_gaussian::UnpackedGaussian;
 use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
 use flate2::write::GzEncoder;
@@ -9,6 +7,9 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::vec;
 use vek::{Vec3, Vec4};
+
+use crate::support::{compute_fixed_point_fractional_bits, inv_sigmoid, sigmoid, FixedPoint24};
+use crate::unpacked_gaussian::UnpackedGaussian;
 
 const COLOR_SCALE: f32 = 0.15;
 
@@ -57,6 +58,7 @@ impl Header {
 pub fn write_spz_to_stream<W: Write>(
     gaussians: &Vec<UnpackedGaussian>,
     stream: &mut W,
+    skip_spherical_harmonics: bool,
 ) -> Result<()> {
     println!("Count: {:?}", gaussians.len());
 
@@ -120,7 +122,6 @@ pub fn write_spz_to_stream<W: Write>(
     for gaussian in gaussians {
         for &v in &gaussian.color {
             let v = (((v * COLOR_SCALE) + 0.5) * 255.0) as u8;
-
             color_data.push(v);
         }
     }
@@ -152,31 +153,39 @@ pub fn write_spz_to_stream<W: Write>(
     stream.write_all(&rotation_data)?;
     drop(rotation_data);
 
-    let mut sh_data = Vec::new();
-    for gaussian in gaussians {
-        for sh in &gaussian.spherical_harmonics {
-            for &v in sh {
-                let v = (v * 127.0 + 128.0) as u8;
-                sh_data.push(v);
-            }
-        }
+    if !skip_spherical_harmonics {
+        unimplemented!();
+        // let mut sh_data = Vec::new();
+        // for gaussian in gaussians {
+        //     for sh in &gaussian.spherical_harmonics {
+        //         for &v in sh {
+        //             let v = (v * 127.0 + 128.0) as u8;
+        //             sh_data.push(v);
+        //         }
+        //     }
+        // }
+        // assert!(sh_data.len() == gaussians.len() * sh_count * 3);
+        // stream.write_all(&sh_data)?;
+        // drop(sh_data);
     }
-    assert!(sh_data.len() == gaussians.len() * sh_count * 3);
-    stream.write_all(&sh_data)?;
-    drop(sh_data);
 
     Ok(())
 }
 
-pub fn write_spz(gaussians: Vec<UnpackedGaussian>, path: &PathBuf, compressed: bool) -> Result<()> {
+pub fn write_spz(
+    gaussians: Vec<UnpackedGaussian>,
+    path: &PathBuf,
+    compressed: bool,
+    skip_spherical_harmonics: bool,
+) -> Result<()> {
     let file = File::create(path)?;
     if compressed {
         let mut stream = GzEncoder::new(file, Compression::best());
-        write_spz_to_stream(&gaussians, &mut stream)?;
+        write_spz_to_stream(&gaussians, &mut stream, skip_spherical_harmonics)?;
         stream.finish()?;
     } else {
         let mut stream = Box::new(file);
-        write_spz_to_stream(&gaussians, &mut stream)?;
+        write_spz_to_stream(&gaussians, &mut stream, skip_spherical_harmonics)?;
     }
     Ok(())
 }
@@ -260,7 +269,7 @@ fn load_spz_from_stream(file: &mut dyn std::io::Read) -> Result<Vec<UnpackedGaus
         .collect::<Vec<_>>();
     drop(rotation_data);
 
-    // ignore sh for now
+    // TODO: ignore sh for now
 
     let gaussians: Vec<UnpackedGaussian> = positions
         .into_iter()
@@ -304,7 +313,7 @@ mod tests {
 
         let mut buffer = Vec::new();
 
-        write_spz_to_stream(&vec![gaussian.clone()], &mut buffer).unwrap();
+        write_spz_to_stream(&vec![gaussian.clone()], &mut buffer, true).unwrap();
 
         let result = load_spz_from_stream(&mut buffer.as_slice()).unwrap();
         assert!(result.len() == 1);
