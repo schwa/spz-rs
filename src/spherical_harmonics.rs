@@ -3,23 +3,54 @@ use std::vec;
 use vek::Vec3;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[repr(u8)]
 pub enum SphericalHarmonicsOrder {
-    Order0 = 0,  // 0 floats
-    Order1 = 3,  // 9 floats
-    Order2 = 8,  // 24 floats
-    Order3 = 15, // 45 floats
+    Order0, // 0 floats / 0 vectors
+    Order1, // 9 floats / 3 vectors
+    Order2, // 24 floats / 8 vectors
+    Order3, // 45 floats / 15 vectors
 }
 
 impl SphericalHarmonicsOrder {
-    pub fn order_for_index(index: usize) -> Self {
-        match index {
-            0 => SphericalHarmonicsOrder::Order0,
-            1..=3 => SphericalHarmonicsOrder::Order1,
-            4..=8 => SphericalHarmonicsOrder::Order2,
-            9..=15 => SphericalHarmonicsOrder::Order3,
-            _ => panic!("Invalid index for SphericalHarmonicsOrder"),
+    pub fn index(&self) -> usize {
+        match self {
+            SphericalHarmonicsOrder::Order0 => 0,
+            SphericalHarmonicsOrder::Order1 => 1,
+            SphericalHarmonicsOrder::Order2 => 2,
+            SphericalHarmonicsOrder::Order3 => 3,
         }
+    }
+
+    pub fn order_for_degree(degree: u8) -> Option<Self> {
+        match degree {
+            0 => Some(SphericalHarmonicsOrder::Order0),
+            1 => Some(SphericalHarmonicsOrder::Order1),
+            2 => Some(SphericalHarmonicsOrder::Order2),
+            3 => Some(SphericalHarmonicsOrder::Order3),
+            _ => None,
+        }
+    }
+
+    pub fn order_for_index(index: usize) -> Option<Self> {
+        match index {
+            0 => Some(SphericalHarmonicsOrder::Order0),
+            1..=3 => Some(SphericalHarmonicsOrder::Order1),
+            4..=8 => Some(SphericalHarmonicsOrder::Order2),
+            9..=15 => Some(SphericalHarmonicsOrder::Order3),
+            _ => None,
+        }
+    }
+
+    pub fn vector_count(&self) -> usize {
+        match self {
+            SphericalHarmonicsOrder::Order0 => 0,
+            SphericalHarmonicsOrder::Order1 => 3,
+            SphericalHarmonicsOrder::Order2 => 8,
+            SphericalHarmonicsOrder::Order3 => 15,
+        }
+    }
+
+    pub fn scalar_count(&self) -> usize {
+        self.vector_count() * 3
     }
 }
 
@@ -38,10 +69,6 @@ impl Default for SphericalHarmonics {
 }
 
 impl SphericalHarmonics {
-    pub fn len(&self) -> usize {
-        self.order() as usize
-    }
-
     pub fn order(&self) -> SphericalHarmonicsOrder {
         match self {
             SphericalHarmonics::Order0(_) => SphericalHarmonicsOrder::Order0,
@@ -108,6 +135,14 @@ impl SphericalHarmonics {
             .collect()
     }
 
+    pub fn set_scalars(&mut self, scalars: &[f32]) {
+        let values = scalars
+            .chunks(3)
+            .map(|chunk| Vec3::new(chunk[0], chunk[1], chunk[2]))
+            .collect();
+        self.set_values(values);
+    }
+
     pub fn extend_scalar(&mut self, scalar_index: usize, value: f32) {
         let sh_index = scalar_index / 3;
         let mut values = self.values();
@@ -127,22 +162,22 @@ mod test {
     fn test_spherical_harmonics() {
         let mut sh = SphericalHarmonics::default();
         assert!(sh.order() == SphericalHarmonicsOrder::Order0);
-        assert!(sh.len() == 0);
+        assert!(sh.order().index() == 0);
         assert!(sh.values().is_empty());
 
         sh.reorder(SphericalHarmonicsOrder::Order1);
         assert!(sh.order() == SphericalHarmonicsOrder::Order1);
-        assert!(sh.len() == 3);
+        assert!(sh.order().index() == 3);
         assert!(sh.values() == vec![Vec3::zero(); 3]);
 
         sh.reorder(SphericalHarmonicsOrder::Order2);
         assert!(sh.order() == SphericalHarmonicsOrder::Order2);
-        assert!(sh.len() == 8);
+        assert!(sh.order().index() == 8);
         assert!(sh.values() == vec![Vec3::zero(); 8]);
 
         sh.reorder(SphericalHarmonicsOrder::Order1);
         assert!(sh.order() == SphericalHarmonicsOrder::Order1);
-        assert!(sh.len() == 3);
+        assert!(sh.order().index() == 3);
         assert!(sh.values() == vec![Vec3::zero(); 3]);
 
         sh = SphericalHarmonics::Order1([
@@ -151,7 +186,7 @@ mod test {
             Vec3::new(7.0, 8.0, 9.0),
         ]);
         assert!(sh.order() == SphericalHarmonicsOrder::Order1);
-        assert!(sh.len() == 3);
+        assert!(sh.order().index() == 3);
         assert!(
             sh.values()
                 == vec![
@@ -163,7 +198,7 @@ mod test {
 
         sh.reorder(SphericalHarmonicsOrder::Order2);
         assert!(sh.order() == SphericalHarmonicsOrder::Order2);
-        assert!(sh.len() == 8);
+        assert!(sh.order().index() == 8);
         assert!(
             sh.values()[..3]
                 == vec![
@@ -175,7 +210,7 @@ mod test {
 
         sh.reorder(SphericalHarmonicsOrder::Order1);
         assert!(sh.order() == SphericalHarmonicsOrder::Order1);
-        assert!(sh.len() == 3);
+        assert!(sh.order().index() == 3);
         assert!(
             sh.values()
                 == vec![
@@ -193,7 +228,7 @@ mod test {
             sh.extend_scalar(n, n as f32);
         }
         assert!(sh.order() == SphericalHarmonicsOrder::Order3);
-        assert!(sh.len() == 15);
+        assert!(sh.order().index() == 15);
         assert!(
             sh.values()
                 == vec![

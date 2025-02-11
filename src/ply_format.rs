@@ -144,7 +144,7 @@ pub fn write_ply_stream<W: Write>(gaussians: &Vec<UnpackedGaussian>, stream: &mu
             "f_dc_2".to_string(),
             PropertyType::Scalar(ScalarType::Float),
         ));
-        for i in 0..gaussians[0].spherical_harmonics.len() {
+        for i in 0..gaussians[0].spherical_harmonics.order().index() {
             element.properties.add(PropertyDef::new(
                 format!("f_rest_{}", i).to_string(),
                 PropertyType::Scalar(ScalarType::Float),
@@ -197,10 +197,6 @@ pub fn write_ply_stream<W: Write>(gaussians: &Vec<UnpackedGaussian>, stream: &mu
 
         ply.payload.insert("vertex".to_string(), records);
 
-        // only `write_ply` calls this by itself, for all other methods the client is
-        // responsible to make the data structure consistent.
-        // We do it here for demonstration purpose.
-        ply.make_consistent()?;
         ply
     };
 
@@ -261,7 +257,7 @@ end_header
         assert_eq!(gaussians[0].alpha, 0.61325896);
         assert_eq!(gaussians[0].scales, Vec3::new(1.0, -1.0, 1.0));
         assert_eq!(gaussians[0].rotation, Vec4::new(0.333, 0.333, 0.333, 1.0));
-        assert_eq!(gaussians[0].spherical_harmonics.len(), 0);
+        assert_eq!(gaussians[0].spherical_harmonics.order().index(), 0);
         let mut output = Vec::new();
         write_ply_stream(&gaussians, &mut output).unwrap();
         let mut stream = std::io::BufReader::new(output.as_slice());

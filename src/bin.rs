@@ -24,11 +24,11 @@ enum Commands {
         /// Do not compress the output. This option will not produce a valid .spz file.
         uncompressed: bool,
 
-        #[arg(short, long, default_value = "true")]
-        /// Do not include spherical harmonics in the output.
-        skip_spherical_harmonics: bool,
-
         #[arg(short, long, default_value = "false")]
+        /// Do not include spherical harmonics in the output.
+        omit_spherical_harmonics: bool,
+
+        #[arg(long, default_value = "false")]
         /// Sort the gaussians using a hilbert curve. This may improve compression. Experimental.
         use_hilbert_sort: bool,
     },
@@ -75,20 +75,22 @@ struct Cli {
 }
 
 fn main() {
+    better_panic::install();
+
     let cli = Cli::parse();
     match cli.command {
         Commands::Encode {
             input,
             output,
             uncompressed,
-            skip_spherical_harmonics,
+            omit_spherical_harmonics,
             use_hilbert_sort,
         } => {
             encode(
                 input,
                 output,
                 uncompressed,
-                skip_spherical_harmonics,
+                omit_spherical_harmonics,
                 use_hilbert_sort,
             )
             .unwrap();
@@ -118,17 +120,14 @@ fn encode(
     input: PathBuf,
     output: PathBuf,
     uncompressed: bool,
-    skip_spherical_harmonics: bool,
+    omit_spherical_harmonics: bool,
     use_hilbert_sort: bool,
 ) -> Result<()> {
     let mut gaussians = load_ply(&input)?;
-    if gaussians.len() == 1 {
-        println!("{:?}", gaussians[0]);
-    }
     if use_hilbert_sort {
         gaussians = hilbert_sort(&gaussians, |g| g.position);
     }
-    write_spz(gaussians, &output, !uncompressed, skip_spherical_harmonics)?;
+    write_spz(gaussians, &output, !uncompressed, omit_spherical_harmonics)?;
     Ok(())
 }
 
@@ -158,6 +157,7 @@ fn info(input: PathBuf) -> Result<()> {
 #[derive(Clone, ValueEnum)]
 enum DumpFormat {
     Debug,
+    Pretty,
     Json,
 }
 
@@ -182,12 +182,16 @@ fn dump(input: PathBuf, limit: Option<usize>, format: DumpFormat) -> Result<()> 
             for g in gaussians.iter() {
                 println!("{:?}", g);
             }
-            Ok(())
+        }
+        DumpFormat::Pretty => {
+            for g in gaussians.iter() {
+                println!("{:#?}", g);
+            }
         }
         DumpFormat::Json => {
             let json = serde_json::to_string_pretty(&gaussians)?;
-            println!("{}", json);
-            Ok(())
+            print!("{}", json);
         }
     }
+    Ok(())
 }

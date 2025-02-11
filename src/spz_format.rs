@@ -2,14 +2,15 @@ use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use itertools;
 use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::vec;
 use vek::{Vec3, Vec4};
 
 use crate::fixedpoint24::{compute_fixed_point_fractional_bits, FixedPoint24};
-use crate::spherical_harmonics::SphericalHarmonics;
+use crate::spherical_harmonics::{SphericalHarmonics, SphericalHarmonicsOrder};
 use crate::support::{inv_sigmoid, sigmoid};
 use crate::unpacked_gaussian::UnpackedGaussian;
 
@@ -60,11 +61,11 @@ impl Header {
 pub fn write_spz_to_stream<W: Write>(
     gaussians: &Vec<UnpackedGaussian>,
     stream: &mut W,
-    skip_spherical_harmonics: bool,
+    omit_spherical_harmonics: bool,
 ) -> Result<()> {
     let sh_count = gaussians
         .iter()
-        .map(|g| g.spherical_harmonics.len())
+        .map(|g| g.spherical_harmonics.order().index())
         .collect::<std::collections::HashSet<_>>();
 
     if sh_count.len() != 1 {
@@ -76,19 +77,8 @@ pub fn write_spz_to_stream<W: Write>(
         .iter()
         .next()
         .ok_or(anyhow::anyhow!("No spherical harmonics"))?;
-    let sh_degree = match sh_count {
-        0 => 0,
-        3 => 1,
-        8 => 2,
-        15 => 3,
-        _ => {
-            return Err(anyhow::anyhow!(format!(
-                "Invalid number of spherical harmonics: {}",
-                sh_count
-            )))
-        }
-    };
-    // println!("sh_degree: {}", sh_degree);
+
+    let order = SphericalHarmonicsOrder::order_for_degree(sh_count as u8);
 
     let positions: Vec<f32> = gaussians
         .iter()
@@ -97,7 +87,8 @@ pub fn write_spz_to_stream<W: Write>(
         .collect();
     let fractional_bits = compute_fixed_point_fractional_bits(&positions, 24);
 
-    // println!("Fractional bits: {}", fractional_bits);
+    let sh_degree = order.ok_or(anyhow::anyhow!("Invalid SH degree"))?.index() as u8;
+
     let header = Header::new(gaussians.len() as u32, sh_degree, fractional_bits as u8, 0);
     stream.write_all(bytemuck::bytes_of(&header))?;
 
@@ -156,8 +147,14 @@ pub fn write_spz_to_stream<W: Write>(
     stream.write_all(&rotation_data)?;
     drop(rotation_data);
 
-    if !skip_spherical_harmonics {
-        unimplemented!("Spherical harmonics are not implemented yet");
+    if !omit_spherical_harmonics {
+        let mut sh_data = Vec::new();
+        for gaussian in gaussians {
+            let bytes = gaussian.spherical_harmonics.spz_bytes();
+            sh_data.extend_from_slice(&bytes);
+        }
+        stream.write_all(&sh_data)?;
+        drop(sh_data);
     }
 
     Ok(())
@@ -167,16 +164,16 @@ pub fn write_spz(
     gaussians: Vec<UnpackedGaussian>,
     path: &PathBuf,
     compressed: bool,
-    skip_spherical_harmonics: bool,
+    omit_spherical_harmonics: bool,
 ) -> Result<()> {
     let file = File::create(path)?;
     if compressed {
         let mut stream = GzEncoder::new(file, Compression::best());
-        write_spz_to_stream(&gaussians, &mut stream, skip_spherical_harmonics)?;
+        write_spz_to_stream(&gaussians, &mut stream, omit_spherical_harmonics)?;
         stream.finish()?;
     } else {
         let mut stream = Box::new(file);
-        write_spz_to_stream(&gaussians, &mut stream, skip_spherical_harmonics)?;
+        write_spz_to_stream(&gaussians, &mut stream, omit_spherical_harmonics)?;
     }
     Ok(())
 }
@@ -190,12 +187,17 @@ pub fn load_spz(path: &PathBuf, compressed: bool) -> Result<Vec<UnpackedGaussian
         let mut decoder = flate2::read::GzDecoder::new(file);
         load_spz_from_stream(&mut decoder)
     }
+
+        // println!("{}", file.stream_position()?);
+
+
 }
 
 fn load_spz_from_stream(file: &mut dyn std::io::Read) -> Result<Vec<UnpackedGaussian>> {
     let mut header_bytes = [0; std::mem::size_of::<Header>()];
     file.read_exact(&mut header_bytes)?;
     let header = Header::from_bytes(&header_bytes)?;
+    println!("header: {:?}", header);
     if !header.is_valid() {
         return Err(anyhow::anyhow!("Invalid header"));
     }
@@ -260,27 +262,83 @@ fn load_spz_from_stream(file: &mut dyn std::io::Read) -> Result<Vec<UnpackedGaus
         .collect::<Vec<_>>();
     drop(rotation_data);
 
-    // TODO: ignore spherical harmonics for now
+    let order = SphericalHarmonicsOrder::order_for_degree(header.sh_degree)
+        .ok_or(anyhow::anyhow!("Invalid SH degree"))?;
+    let scalar_count = order.scalar_count();
+    let mut spherical_harmonics_data = vec![0; header.num_points as usize * scalar_count];
+    file.read_exact(&mut spherical_harmonics_data)?;
+    let spherical_harmonics = spherical_harmonics_data
+        .chunks(scalar_count)
+        .map(|chunk| SphericalHarmonics::from_spz_bytes(chunk.to_vec()))
+        .collect::<Vec<_>>();
+    drop(spherical_harmonics_data);
 
-    let gaussians: Vec<UnpackedGaussian> = positions
-        .into_iter()
-        .zip(scales)
-        .zip(rotations)
-        .zip(alphas)
-        .zip(colors)
-        .map(
-            |((((position, scales), rotation), alpha), color)| UnpackedGaussian {
-                position,
-                scales,
-                rotation,
-                alpha,
-                color,
-                spherical_harmonics: SphericalHarmonics::default(),
-            },
-        )
-        .collect();
+    let gaussians: Vec<UnpackedGaussian> = itertools::izip!(
+        positions.iter(),
+        scales.iter(),
+        rotations.iter(),
+        alphas.iter(),
+        colors.iter(),
+        spherical_harmonics.iter()
+    )
+    .map({
+        |(position, scale, rotation, alpha, color, spherical_harmonics)| UnpackedGaussian {
+            position: *position,
+            scales: *scale,
+            rotation: *rotation,
+            alpha: *alpha,
+            color: *color,
+            spherical_harmonics: *spherical_harmonics,
+        }
+    })
+    .collect();
 
     Ok(gaussians)
+}
+
+const SH1_BITS: i32 = 5;
+const SH_REST_BITS: i32 = 4;
+
+impl SphericalHarmonics {
+    fn from_spz_bytes(bytes: Vec<u8>) -> Self {
+        fn unquantize_sh(x: u8) -> f32 {
+            (x as f32 - 128.0) / 128.0
+        }
+        let values = bytes
+            .iter()
+            .map(|&x| unquantize_sh(x))
+            .collect::<Vec<f32>>();
+        let mut sh = SphericalHarmonics::default();
+        sh.set_scalars(&values);
+        println!("from_spz_bytes: {:?}", values.len());
+        sh
+    }
+
+    fn spz_bytes(&self) -> Vec<u8> {
+        fn quantize_sh(x: f32, bucket_size: i32) -> u8 {
+            let mut q = ((x * 128.0).round() as i32) + 128;
+            q = (q + bucket_size / 2) / bucket_size * bucket_size;
+            q.clamp(0, 255) as u8
+        }
+
+        let scalar_count = self.order().scalar_count();
+        let scalars = self.scalars();
+        assert!(scalars.len() == scalar_count);
+        let mut sh: Vec<u8> = vec![0; scalar_count];
+
+        let i = 0;
+        let mut j = 0;
+        while j < 9 {
+            sh[i + j] = quantize_sh(scalars[i + j], 1 << (8 - SH1_BITS));
+            j += 1;
+        }
+        while j < scalar_count {
+            sh[i + j] = quantize_sh(scalars[i + j], 1 << (8 - SH_REST_BITS));
+            j += 1;
+        }
+        println!("to_spz_bytes: {:?}", sh.len());
+        sh
+    }
 }
 
 #[cfg(test)]
@@ -351,3 +409,5 @@ mod tests {
             .collect::<Vec<_>>()
     }
 }
+
+//
