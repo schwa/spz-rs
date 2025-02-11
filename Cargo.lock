@@ -499,7 +499,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "spz-rs"
+name = "spz"
 version = "0.1.0"
 dependencies = [
  "anyhow",
