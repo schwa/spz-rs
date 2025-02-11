@@ -111,7 +111,7 @@ fn hilbert_index_3d(mut x: u32, mut y: u32, mut z: u32, bits: u32) -> u64 {
     index
 }
 
-pub fn hilbert_sort<T, F>(points: &Vec<T>, position: F) -> Vec<T>
+pub(crate) fn hilbert_sort<T, F>(points: &Vec<T>, position: F) -> Vec<T>
 where
     T: Clone,
     F: Fn(&T) -> Vec3<f32>,

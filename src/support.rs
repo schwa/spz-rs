@@ -1,8 +1,8 @@
-pub fn linear_to_log(v: f32) -> f32 {
+pub(crate) fn linear_to_log(v: f32) -> f32 {
     1.0 - f32::exp(-v)
 }
 
-pub fn log_to_linear(v: f32) -> f32 {
+pub(crate) fn log_to_linear(v: f32) -> f32 {
     -f32::ln(1.0 - v)
 }
 
@@ -11,16 +11,16 @@ pub fn log_to_linear(v: f32) -> f32 {
 #[allow(clippy::excessive_precision)]
 const SPHERICAL_HARMONICS_ORDER0_COEFFICIENT: f32 = 0.282_094_791_773_878_14;
 
-pub fn sph0_to_linear(v: f32) -> f32 {
+pub(crate) fn sph0_to_linear(v: f32) -> f32 {
     0.5 + SPHERICAL_HARMONICS_ORDER0_COEFFICIENT * v
 }
 
-pub fn linear_to_sph0(v: f32) -> f32 {
+pub(crate) fn linear_to_sph0(v: f32) -> f32 {
     (v - 0.5) / SPHERICAL_HARMONICS_ORDER0_COEFFICIENT
 }
 
 // Given an array of floats and the desired bit_count work out the ideal number of fractional bits needed to represent the floats with as much precision as possible.
-pub fn compute_fixed_point_fractional_bits(floats: &[f32], bit_count: usize) -> usize {
+pub(crate) fn compute_fixed_point_fractional_bits(floats: &[f32], bit_count: usize) -> usize {
     floats
         .iter()
         .map(|v| FixedPoint24::new(*v).optimal_fractional_bits().unwrap_or(0))
@@ -30,14 +30,14 @@ pub fn compute_fixed_point_fractional_bits(floats: &[f32], bit_count: usize) -> 
 }
 
 /// A 24 bit fixed floating point number with N fractional bits
-pub struct FixedPoint24(pub f32);
+pub(crate) struct FixedPoint24(pub f32);
 
 impl FixedPoint24 {
-    pub fn new(value: f32) -> Self {
+    pub(crate) fn new(value: f32) -> Self {
         Self(value)
     }
 
-    pub fn into(self, fractional_bits: usize) -> [u8; 3] {
+    pub(crate) fn into(self, fractional_bits: usize) -> [u8; 3] {
         // 1) Multiply float by 2^fractional_bits.
         let scaling_factor = (1 << fractional_bits) as f32;
         // 2) Convert to integer (rounding or truncating as desired).
@@ -59,7 +59,7 @@ impl FixedPoint24 {
         ]
     }
 
-    pub fn from(bytes: [u8; 3], fractional_bits: usize) -> Self {
+    pub(crate) fn from(bytes: [u8; 3], fractional_bits: usize) -> Self {
         // 1) Reconstruct the 24-bit unsigned integer from the little-endian byte order.
         let raw = (bytes[0] as u32) | ((bytes[1] as u32) << 8) | ((bytes[2] as u32) << 16);
 
@@ -87,13 +87,13 @@ impl FixedPoint24 {
 
 // float sigmoid(float x) { return 1 / (1 + std::exp(-x)); }
 
-pub fn sigmoid(x: f32) -> f32 {
+pub(crate) fn sigmoid(x: f32) -> f32 {
     1.0 / (1.0 + f32::exp(-x))
 }
 
 // float invSigmoid(float x) { return std::log(x / (1.0f - x)); }
 
-pub fn inv_sigmoid(x: f32) -> f32 {
+pub(crate) fn inv_sigmoid(x: f32) -> f32 {
     f32::ln(x / (1.0 - x))
 }
 

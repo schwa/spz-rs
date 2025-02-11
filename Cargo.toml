@@ -13,3 +13,11 @@ vek = "0.17.1"
 
 [dev-dependencies]
 approx = "0.5.1"
+
+[lib]
+name = "spz"
+path = "src/lib.rs"
+
+[[bin]]
+name = "spz-rs"
+path = "src/bin.rs"

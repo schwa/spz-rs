@@ -1,13 +1,11 @@
 mod hilbert_curve;
-mod spz;
-mod support;
-mod unpacked_gaussian;
 
 use clap::{Parser, Subcommand};
 use hilbert_curve::hilbert_sort;
-use spz::{load_spz, write_spz};
+use spz_format::{load_spz, write_spz};
 use std::path::PathBuf;
-use unpacked_gaussian::{load_ply, write_ply};
+use ply_format::{load_ply, write_ply};
+use spz::*;
 
 #[derive(Subcommand)]
 enum Commands {
