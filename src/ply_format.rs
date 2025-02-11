@@ -10,6 +10,7 @@ use std::io::{BufRead, Write};
 use std::path::PathBuf;
 use vek::{Vec3, Vec4};
 
+use crate::spherical_harmonics::SphericalHarmonics;
 use crate::support::{linear_to_log, linear_to_sph0, log_to_linear, sph0_to_linear};
 use crate::unpacked_gaussian::UnpackedGaussian;
 
@@ -21,17 +22,11 @@ impl ply::PropertyAccess for UnpackedGaussian {
             scales: Vec3::one(),
             color: Vec3::zero(),
             alpha: 0.0,
-            spherical_harmonics: Vec::new(),
+            spherical_harmonics: SphericalHarmonics::default(),
         }
     }
 
     fn set_property(&mut self, property_name: String, property: ply::Property) {
-        fn extend(vec: &mut Vec<Vec3<f32>>, size: usize) {
-            if vec.len() < size {
-                vec.resize(size, Vec3::zero());
-            }
-        }
-
         match (property_name.as_ref(), property) {
             ("x", ply::Property::Float(v)) => self.position[0] = v,
             ("y", ply::Property::Float(v)) => self.position[1] = v,
@@ -52,10 +47,7 @@ impl ply::PropertyAccess for UnpackedGaussian {
             ("f_dc_2", ply::Property::Float(v)) => self.color[2] = sph0_to_linear(v),
             (name, ply::Property::Float(v)) if name.starts_with("f_rest_") => {
                 let index: usize = name["f_rest_".len()..].parse().unwrap();
-                let sh_index = index / 3;
-                let vec_index = index % 3;
-                extend(&mut self.spherical_harmonics, sh_index + 1);
-                self.spherical_harmonics[sh_index][vec_index] = v;
+                self.spherical_harmonics.extend_scalar(index, v);
             }
             (k, _) => panic!("Vertex: Unexpected key/value combination: key: {}", k),
         }
@@ -195,12 +187,11 @@ pub fn write_ply_stream<W: Write>(gaussians: &Vec<UnpackedGaussian>, stream: &mu
                 "f_dc_2".to_string(),
                 Property::Float(linear_to_sph0(gaussian.color.z)),
             );
-            for i in 0..gaussian.spherical_harmonics.len() {
-                record.insert(
-                    format!("f_rest_{}", i).to_string(),
-                    Property::Float(gaussian.spherical_harmonics[i].x),
-                );
+
+            for (i, v) in gaussian.spherical_harmonics.scalars().iter().enumerate() {
+                record.insert(format!("f_rest_{}", i).to_string(), Property::Float(*v));
             }
+
             records.push(record)
         }
 
@@ -209,7 +200,7 @@ pub fn write_ply_stream<W: Write>(gaussians: &Vec<UnpackedGaussian>, stream: &mu
         // only `write_ply` calls this by itself, for all other methods the client is
         // responsible to make the data structure consistent.
         // We do it here for demonstration purpose.
-        ply.make_consistent().unwrap();
+        ply.make_consistent()?;
         ply
     };
 

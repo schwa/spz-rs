@@ -1,11 +1,12 @@
 mod hilbert_curve;
 
-use clap::{Parser, Subcommand};
+use anyhow::Result;
+use clap::{Parser, Subcommand, ValueEnum};
 use hilbert_curve::hilbert_sort;
+use ply_format::{load_ply, write_ply};
+use spz::{unpacked_gaussian::UnpackedGaussian, *};
 use spz_format::{load_spz, write_spz};
 use std::path::PathBuf;
-use ply_format::{load_ply, write_ply};
-use spz::*;
 
 #[derive(Subcommand)]
 enum Commands {
@@ -46,6 +47,24 @@ enum Commands {
         /// Do not decompress the input.
         uncompressed: bool,
     },
+
+    Info {
+        #[arg(value_name = "INPUT")]
+        /// The input .spz file
+        input: PathBuf,
+    },
+
+    Dump {
+        #[arg(value_name = "INPUT")]
+        /// The input .spz file
+        input: PathBuf,
+
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        #[arg(short, long, default_value = "debug")]
+        format: DumpFormat,
+    },
 }
 
 #[derive(Parser)]
@@ -65,24 +84,110 @@ fn main() {
             skip_spherical_harmonics,
             use_hilbert_sort,
         } => {
-            let mut gaussians = load_ply(&input).unwrap();
-            if gaussians.len() == 1 {
-                println!("{:?}", gaussians[0]);
-            }
-
-            if use_hilbert_sort {
-                gaussians = hilbert_sort(&gaussians, |g| g.position);
-            }
-
-            write_spz(gaussians, &output, !uncompressed, skip_spherical_harmonics).unwrap();
+            encode(
+                input,
+                output,
+                uncompressed,
+                skip_spherical_harmonics,
+                use_hilbert_sort,
+            )
+            .unwrap();
         }
         Commands::Decode {
             input,
             output,
             uncompressed,
         } => {
-            let gaussians = load_spz(&input, !uncompressed).unwrap();
-            write_ply(&gaussians, &output).unwrap();
+            decode(input, output, uncompressed).unwrap();
+        }
+        Commands::Info { input } => {
+            info(input).unwrap();
+        }
+
+        Commands::Dump {
+            input,
+            limit,
+            format,
+        } => {
+            dump(input, limit, format).unwrap();
+        }
+    }
+}
+
+fn encode(
+    input: PathBuf,
+    output: PathBuf,
+    uncompressed: bool,
+    skip_spherical_harmonics: bool,
+    use_hilbert_sort: bool,
+) -> Result<()> {
+    let mut gaussians = load_ply(&input)?;
+    if gaussians.len() == 1 {
+        println!("{:?}", gaussians[0]);
+    }
+    if use_hilbert_sort {
+        gaussians = hilbert_sort(&gaussians, |g| g.position);
+    }
+    write_spz(gaussians, &output, !uncompressed, skip_spherical_harmonics)?;
+    Ok(())
+}
+
+fn decode(input: PathBuf, output: PathBuf, uncompressed: bool) -> Result<()> {
+    let gaussians = load_spz(&input, !uncompressed)?;
+    write_ply(&gaussians, &output)?;
+    Ok(())
+}
+
+fn info(input: PathBuf) -> Result<()> {
+    let mut info = Vec::<String>::new();
+    let extension = input
+        .extension()
+        .and_then(|s| s.to_str())
+        .ok_or(anyhow::anyhow!("No extension"))?;
+    let gaussians: Option<Vec<UnpackedGaussian>> = match extension {
+        "spz" => load_spz(&input, true).ok(),
+        "ply" => load_ply(&input).ok(),
+        _ => panic!("Unsupported file extension"),
+    };
+    let gaussians = gaussians.ok_or(anyhow::anyhow!("Failed to load file"))?;
+    info.push(format!("Number of gaussians: {}", gaussians.len()));
+    println!("{}", info.join("\n"));
+    Ok(())
+}
+
+#[derive(Clone, ValueEnum)]
+enum DumpFormat {
+    Debug,
+    Json,
+}
+
+fn dump(input: PathBuf, limit: Option<usize>, format: DumpFormat) -> Result<()> {
+    let extension = input
+        .extension()
+        .and_then(|s| s.to_str())
+        .ok_or(anyhow::anyhow!("No extension"))?;
+    let gaussians: Option<Vec<UnpackedGaussian>> = match extension {
+        "spz" => load_spz(&input, true).ok(),
+        "ply" => load_ply(&input).ok(),
+        _ => panic!("Unsupported file extension"),
+    };
+    let mut gaussians = gaussians.ok_or(anyhow::anyhow!("Failed to load file"))?;
+
+    if let Some(limit) = limit {
+        gaussians.truncate(limit);
+    }
+
+    match format {
+        DumpFormat::Debug => {
+            for g in gaussians.iter() {
+                println!("{:?}", g);
+            }
+            Ok(())
+        }
+        DumpFormat::Json => {
+            let json = serde_json::to_string_pretty(&gaussians)?;
+            println!("{}", json);
+            Ok(())
         }
     }
 }

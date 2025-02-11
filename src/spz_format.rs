@@ -8,9 +8,10 @@ use std::path::PathBuf;
 use std::vec;
 use vek::{Vec3, Vec4};
 
+use crate::fixedpoint24::{compute_fixed_point_fractional_bits, FixedPoint24};
+use crate::spherical_harmonics::SphericalHarmonics;
 use crate::support::{inv_sigmoid, sigmoid};
 use crate::unpacked_gaussian::UnpackedGaussian;
-use crate::fixedpoint24::{FixedPoint24, compute_fixed_point_fractional_bits};
 
 const COLOR_SCALE: f32 = 0.15;
 
@@ -27,16 +28,16 @@ struct Header {
 }
 
 impl Header {
-    fn from_bytes(bytes: &[u8]) -> Self {
-        Self {
-            magic: u32::from_le_bytes(bytes[0..4].try_into().unwrap()),
-            version: u32::from_le_bytes(bytes[4..8].try_into().unwrap()),
-            num_points: u32::from_le_bytes(bytes[8..12].try_into().unwrap()),
+    fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        Ok(Self {
+            magic: u32::from_le_bytes(bytes[0..4].try_into()?),
+            version: u32::from_le_bytes(bytes[4..8].try_into()?),
+            num_points: u32::from_le_bytes(bytes[8..12].try_into()?),
             sh_degree: bytes[12],
             fractional_bits: bytes[13],
             flags: bytes[14],
             reserved: bytes[15],
-        }
+        })
     }
 
     fn is_valid(&self) -> bool {
@@ -61,8 +62,6 @@ pub fn write_spz_to_stream<W: Write>(
     stream: &mut W,
     skip_spherical_harmonics: bool,
 ) -> Result<()> {
-    println!("Count: {:?}", gaussians.len());
-
     let sh_count = gaussians
         .iter()
         .map(|g| g.spherical_harmonics.len())
@@ -73,7 +72,10 @@ pub fn write_spz_to_stream<W: Write>(
             "All gaussians must have the same spherical harmonic degree"
         ));
     }
-    let sh_count = sh_count.iter().next().unwrap();
+    let sh_count = *sh_count
+        .iter()
+        .next()
+        .ok_or(anyhow::anyhow!("No spherical harmonics"))?;
     let sh_degree = match sh_count {
         0 => 0,
         3 => 1,
@@ -86,7 +88,7 @@ pub fn write_spz_to_stream<W: Write>(
             )))
         }
     };
-    println!("sh_degree: {}", sh_degree);
+    // println!("sh_degree: {}", sh_degree);
 
     let positions: Vec<f32> = gaussians
         .iter()
@@ -95,7 +97,7 @@ pub fn write_spz_to_stream<W: Write>(
         .collect();
     let fractional_bits = compute_fixed_point_fractional_bits(&positions, 24);
 
-    println!("Fractional bits: {}", fractional_bits);
+    // println!("Fractional bits: {}", fractional_bits);
     let header = Header::new(gaussians.len() as u32, sh_degree, fractional_bits as u8, 0);
     stream.write_all(bytemuck::bytes_of(&header))?;
 
@@ -193,7 +195,7 @@ pub fn load_spz(path: &PathBuf, compressed: bool) -> Result<Vec<UnpackedGaussian
 fn load_spz_from_stream(file: &mut dyn std::io::Read) -> Result<Vec<UnpackedGaussian>> {
     let mut header_bytes = [0; std::mem::size_of::<Header>()];
     file.read_exact(&mut header_bytes)?;
-    let header = Header::from_bytes(&header_bytes);
+    let header = Header::from_bytes(&header_bytes)?;
     if !header.is_valid() {
         return Err(anyhow::anyhow!("Invalid header"));
     }
@@ -203,10 +205,10 @@ fn load_spz_from_stream(file: &mut dyn std::io::Read) -> Result<Vec<UnpackedGaus
     let positions: Vec<Vec3<f32>> = position_data
         .chunks_exact(3)
         .map(|chunk| {
-            let chunk: [u8; 3] = chunk.try_into().unwrap();
-            FixedPoint24::from(chunk, header.fractional_bits as usize).0
+            let chunk: [u8; 3] = chunk.try_into()?;
+            Ok(FixedPoint24::from(chunk, header.fractional_bits as usize).0)
         })
-        .collect::<Vec<_>>()
+        .collect::<Result<Vec<_>>>()?
         .chunks(3)
         .map(|chunk| Vec3::new(chunk[0], chunk[1], chunk[2]))
         .collect();
@@ -258,7 +260,7 @@ fn load_spz_from_stream(file: &mut dyn std::io::Read) -> Result<Vec<UnpackedGaus
         .collect::<Vec<_>>();
     drop(rotation_data);
 
-    // TODO: ignore sh for now
+    // TODO: ignore spherical harmonics for now
 
     let gaussians: Vec<UnpackedGaussian> = positions
         .into_iter()
@@ -273,7 +275,7 @@ fn load_spz_from_stream(file: &mut dyn std::io::Read) -> Result<Vec<UnpackedGaus
                 rotation,
                 alpha,
                 color,
-                spherical_harmonics: Vec::new(),
+                spherical_harmonics: SphericalHarmonics::default(),
             },
         )
         .collect();
@@ -285,7 +287,6 @@ fn load_spz_from_stream(file: &mut dyn std::io::Read) -> Result<Vec<UnpackedGaus
 mod tests {
     use approx::assert_relative_eq;
 
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use crate::unpacked_gaussian::*;
 
@@ -297,7 +298,7 @@ mod tests {
             scales: Vec3::new(1.0, 2.0, 1.0),
             color: Vec3::new(1.0, 0.5, 0.25),
             alpha: 0.95,
-            spherical_harmonics: Vec::new(),
+            spherical_harmonics: SphericalHarmonics::default(),
         };
 
         let mut buffer = Vec::new();
@@ -307,8 +308,6 @@ mod tests {
         let result = load_spz_from_stream(&mut buffer.as_slice()).unwrap();
         assert!(result.len() == 1);
         let result = &result[0];
-        println!("{:?}", gaussian);
-        println!("{:?}", result);
         assert!(gaussian.position == result.position);
         assert!(gaussian.scales == result.scales);
         assert_relative_eq!(gaussian.rotation[0], result.rotation[0], epsilon = 1e-2);

@@ -1,4 +1,3 @@
-
 /// A 24 bit fixed floating point number with N fractional bits
 pub(crate) struct FixedPoint24(pub f32);
 

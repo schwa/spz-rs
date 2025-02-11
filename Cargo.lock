@@ -508,6 +508,8 @@ dependencies = [
  "clap",
  "flate2",
  "ply-rs",
+ "serde",
+ "serde_json",
  "vek",
 ]
 
