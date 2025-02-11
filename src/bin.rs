@@ -6,12 +6,12 @@ use hilbert_curve::hilbert_sort;
 use ply_format::{load_ply, write_ply};
 use spz::{unpacked_gaussian::UnpackedGaussian, *};
 use spz_format::{load_spz, write_spz};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Subcommand)]
 enum Commands {
     /// Convert a .ply file to a .spz file
-    Encode {
+    Convert {
         #[arg(value_name = "INPUT")]
         /// The input .ply file
         input: PathBuf,
@@ -33,21 +33,6 @@ enum Commands {
         use_hilbert_sort: bool,
     },
 
-    /// Convert a .spz file to a .ply file
-    Decode {
-        #[arg(value_name = "INPUT")]
-        /// The input .spz file
-        input: PathBuf,
-
-        #[arg(value_name = "OUTPUT")]
-        /// The output .ply file
-        output: PathBuf,
-
-        #[arg(short, long, default_value = "false")]
-        /// Do not decompress the input.
-        uncompressed: bool,
-    },
-
     Info {
         #[arg(value_name = "INPUT")]
         /// The input .spz file
@@ -65,6 +50,13 @@ enum Commands {
         #[arg(short, long, default_value = "debug")]
         format: DumpFormat,
     },
+
+    Diff {
+        #[arg(value_name = "OLD")]
+        old: PathBuf,
+        #[arg(value_name = "NEW")]
+        new: PathBuf,
+    },
 }
 
 #[derive(Parser)]
@@ -79,31 +71,24 @@ fn main() {
 
     let cli = Cli::parse();
     match cli.command {
-        Commands::Encode {
+        Commands::Convert {
             input,
             output,
             uncompressed,
             omit_spherical_harmonics,
             use_hilbert_sort,
         } => {
-            encode(
-                input,
-                output,
+            convert(
+                &input,
+                &output,
                 uncompressed,
                 omit_spherical_harmonics,
                 use_hilbert_sort,
             )
             .unwrap();
         }
-        Commands::Decode {
-            input,
-            output,
-            uncompressed,
-        } => {
-            decode(input, output, uncompressed).unwrap();
-        }
         Commands::Info { input } => {
-            info(input).unwrap();
+            info(&input).unwrap();
         }
 
         Commands::Dump {
@@ -111,41 +96,44 @@ fn main() {
             limit,
             format,
         } => {
-            dump(input, limit, format).unwrap();
+            dump(&input, limit, format).unwrap();
+        }
+
+        Commands::Diff { old, new } => {
+            diff(&old, &new, None).unwrap();
         }
     }
 }
 
-fn encode(
-    input: PathBuf,
-    output: PathBuf,
+fn convert(
+    input: &Path,
+    output: &Path,
     uncompressed: bool,
     omit_spherical_harmonics: bool,
     use_hilbert_sort: bool,
 ) -> Result<()> {
-    let mut gaussians = load_ply(&input)?;
+    let mut gaussians = load(input)?;
     if use_hilbert_sort {
         gaussians = hilbert_sort(&gaussians, |g| g.position);
     }
-    write_spz(gaussians, &output, !uncompressed, omit_spherical_harmonics)?;
+
+    let options = SaveOptions {
+        compressed: !uncompressed,
+        omit_spherical_harmonics,
+    };
+    save(gaussians, output, &options)?;
     Ok(())
 }
 
-fn decode(input: PathBuf, output: PathBuf, uncompressed: bool) -> Result<()> {
-    let gaussians = load_spz(&input, !uncompressed)?;
-    write_ply(&gaussians, &output)?;
-    Ok(())
-}
-
-fn info(input: PathBuf) -> Result<()> {
+fn info(input: &Path) -> Result<()> {
     let mut info = Vec::<String>::new();
     let extension = input
         .extension()
         .and_then(|s| s.to_str())
         .ok_or(anyhow::anyhow!("No extension"))?;
     let gaussians: Option<Vec<UnpackedGaussian>> = match extension {
-        "spz" => load_spz(&input, true).ok(),
-        "ply" => load_ply(&input).ok(),
+        "spz" => load_spz(input, true).ok(),
+        "ply" => load_ply(input).ok(),
         _ => panic!("Unsupported file extension"),
     };
     let gaussians = gaussians.ok_or(anyhow::anyhow!("Failed to load file"))?;
@@ -161,17 +149,8 @@ enum DumpFormat {
     Json,
 }
 
-fn dump(input: PathBuf, limit: Option<usize>, format: DumpFormat) -> Result<()> {
-    let extension = input
-        .extension()
-        .and_then(|s| s.to_str())
-        .ok_or(anyhow::anyhow!("No extension"))?;
-    let gaussians: Option<Vec<UnpackedGaussian>> = match extension {
-        "spz" => load_spz(&input, true).ok(),
-        "ply" => load_ply(&input).ok(),
-        _ => panic!("Unsupported file extension"),
-    };
-    let mut gaussians = gaussians.ok_or(anyhow::anyhow!("Failed to load file"))?;
+fn dump(input: &Path, limit: Option<usize>, format: DumpFormat) -> Result<()> {
+    let mut gaussians = load(input)?;
 
     if let Some(limit) = limit {
         gaussians.truncate(limit);
@@ -194,4 +173,79 @@ fn dump(input: PathBuf, limit: Option<usize>, format: DumpFormat) -> Result<()> 
         }
     }
     Ok(())
+}
+
+fn load(input: &Path) -> Result<Vec<UnpackedGaussian>> {
+    let extension = input
+        .extension()
+        .and_then(|s| s.to_str())
+        .ok_or(anyhow::anyhow!("No extension"))?;
+    match extension {
+        "spz" => load_spz(input, true),
+        "ply" => load_ply(input),
+        _ => panic!("Unsupported file extension"),
+    }
+}
+
+struct SaveOptions {
+    compressed: bool,
+    omit_spherical_harmonics: bool,
+}
+
+fn save(gaussians: Vec<UnpackedGaussian>, output: &Path, options: &SaveOptions) -> Result<()> {
+    let extension = output
+        .extension()
+        .and_then(|s| s.to_str())
+        .ok_or(anyhow::anyhow!("No extension"))?;
+    match extension {
+        "spz" => write_spz(
+            gaussians,
+            output,
+            options.compressed,
+            options.omit_spherical_harmonics,
+        ),
+        "ply" => write_ply(&gaussians, output),
+        _ => panic!("Unsupported file extension"),
+    }
+}
+
+fn diff(old: &Path, new: &Path, limit: Option<usize>) -> Result<()> {
+    let old = load(old)?;
+    let new = load(new)?;
+
+    if old.len() != new.len() {
+        println!(
+            "Different number of gaussians: {} vs {}",
+            old.len(),
+            new.len()
+        );
+        return Ok(());
+    }
+
+    if old == new {
+        println!("Files are identical");
+        return Ok(());
+    }
+
+    for (old, new) in old.iter().zip(new.iter()) {
+        if old != new {
+            let old = format!("{:#?}", old);
+            let new = format!("{:#?}", new);
+            println!("{}", side_by_side(&old, &new));
+        }
+    }
+
+    Ok(())
+}
+
+fn side_by_side(left: &str, right: &str) -> String {
+    let left = left.lines();
+    let left_max_len = left.clone().map(|l| l.len()).max().unwrap_or(0);
+    let right = right.lines();
+    
+    left
+        .zip(right)
+        .map(|(l, r)| format!("{:<width$} | {}", l, r, width = left_max_len))
+        .collect::<Vec<_>>()
+        .join("\n")
 }

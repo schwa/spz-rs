@@ -7,18 +7,17 @@ use ply_rs::ply::{
 };
 use ply_rs::writer::Writer;
 use std::io::{BufRead, Write};
-use std::path::PathBuf;
-use vek::{Vec3, Vec4};
+use std::path::Path;
+use vek::{Quaternion, Vec3};
 
 use crate::spherical_harmonics::SphericalHarmonics;
-use crate::support::{linear_to_log, linear_to_sph0, log_to_linear, sph0_to_linear};
 use crate::unpacked_gaussian::UnpackedGaussian;
 
 impl ply::PropertyAccess for UnpackedGaussian {
     fn new() -> Self {
         Self {
             position: Vec3::zero(),
-            rotation: Vec4::zero(), // TODO: this is not a good default value for a quaternion
+            rotation: Quaternion::identity(),
             scales: Vec3::one(),
             color: Vec3::zero(),
             alpha: 0.0,
@@ -31,20 +30,20 @@ impl ply::PropertyAccess for UnpackedGaussian {
             ("x", ply::Property::Float(v)) => self.position[0] = v,
             ("y", ply::Property::Float(v)) => self.position[1] = v,
             ("z", ply::Property::Float(v)) => self.position[2] = v,
-            ("rot_0", ply::Property::Float(v)) => self.rotation[0] = v,
-            ("rot_1", ply::Property::Float(v)) => self.rotation[1] = v,
-            ("rot_2", ply::Property::Float(v)) => self.rotation[2] = v,
-            ("rot_3", ply::Property::Float(v)) => self.rotation[3] = v,
+            ("rot_0", ply::Property::Float(v)) => self.rotation.x = v,
+            ("rot_1", ply::Property::Float(v)) => self.rotation.y = v,
+            ("rot_2", ply::Property::Float(v)) => self.rotation.z = v,
+            ("rot_3", ply::Property::Float(v)) => self.rotation.w = v,
             ("scale_0", ply::Property::Float(v)) => self.scales[0] = v,
             ("scale_1", ply::Property::Float(v)) => self.scales[1] = v,
             ("scale_2", ply::Property::Float(v)) => self.scales[2] = v,
-            ("opacity", ply::Property::Float(v)) => self.alpha = linear_to_log(v),
+            ("opacity", ply::Property::Float(v)) => self.alpha = v,
             ("nx", _) => (),
             ("ny", _) => (),
             ("nz", _) => (),
-            ("f_dc_0", ply::Property::Float(v)) => self.color[0] = sph0_to_linear(v),
-            ("f_dc_1", ply::Property::Float(v)) => self.color[1] = sph0_to_linear(v),
-            ("f_dc_2", ply::Property::Float(v)) => self.color[2] = sph0_to_linear(v),
+            ("f_dc_0", ply::Property::Float(v)) => self.color[0] = v,
+            ("f_dc_1", ply::Property::Float(v)) => self.color[1] = v,
+            ("f_dc_2", ply::Property::Float(v)) => self.color[2] = v,
             (name, ply::Property::Float(v)) if name.starts_with("f_rest_") => {
                 let index: usize = name["f_rest_".len()..].parse().unwrap();
                 self.spherical_harmonics.extend_scalar(index, v);
@@ -168,25 +167,13 @@ pub fn write_ply_stream<W: Write>(gaussians: &Vec<UnpackedGaussian>, stream: &mu
             record.insert("scale_0".to_string(), Property::Float(gaussian.scales.x));
             record.insert("scale_1".to_string(), Property::Float(gaussian.scales.y));
             record.insert("scale_2".to_string(), Property::Float(gaussian.scales.z));
-            record.insert(
-                "opacity".to_string(),
-                Property::Float(log_to_linear(gaussian.alpha)),
-            );
+            record.insert("opacity".to_string(), Property::Float(gaussian.alpha));
             record.insert("nx".to_string(), Property::Float(0.0));
             record.insert("ny".to_string(), Property::Float(0.0));
             record.insert("nz".to_string(), Property::Float(0.0));
-            record.insert(
-                "f_dc_0".to_string(),
-                Property::Float(linear_to_sph0(gaussian.color.x)),
-            );
-            record.insert(
-                "f_dc_1".to_string(),
-                Property::Float(linear_to_sph0(gaussian.color.y)),
-            );
-            record.insert(
-                "f_dc_2".to_string(),
-                Property::Float(linear_to_sph0(gaussian.color.z)),
-            );
+            record.insert("f_dc_0".to_string(), Property::Float(gaussian.color.x));
+            record.insert("f_dc_1".to_string(), Property::Float(gaussian.color.y));
+            record.insert("f_dc_2".to_string(), Property::Float(gaussian.color.z));
 
             for (i, v) in gaussian.spherical_harmonics.scalars().iter().enumerate() {
                 record.insert(format!("f_rest_{}", i).to_string(), Property::Float(*v));
@@ -207,13 +194,13 @@ pub fn write_ply_stream<W: Write>(gaussians: &Vec<UnpackedGaussian>, stream: &mu
     Ok(())
 }
 
-pub fn load_ply(path: &PathBuf) -> Result<Vec<UnpackedGaussian>> {
+pub fn load_ply(path: &Path) -> Result<Vec<UnpackedGaussian>> {
     let file = std::fs::File::open(path)?;
     let mut stream = std::io::BufReader::new(file);
     load_ply_stream(&mut stream)
 }
 
-pub fn write_ply(gaussians: &Vec<UnpackedGaussian>, path: &PathBuf) -> Result<()> {
+pub fn write_ply(gaussians: &Vec<UnpackedGaussian>, path: &Path) -> Result<()> {
     let mut file = std::fs::File::create(path)?;
     write_ply_stream(gaussians, &mut file)
 }
@@ -256,7 +243,10 @@ end_header
         );
         assert_eq!(gaussians[0].alpha, 0.61325896);
         assert_eq!(gaussians[0].scales, Vec3::new(1.0, -1.0, 1.0));
-        assert_eq!(gaussians[0].rotation, Vec4::new(0.333, 0.333, 0.333, 1.0));
+        assert_eq!(
+            gaussians[0].rotation,
+            Quaternion::from_xyzw(0.333, 0.333, 0.333, 1.0)
+        );
         assert_eq!(gaussians[0].spherical_harmonics.order().index(), 0);
         let mut output = Vec::new();
         write_ply_stream(&gaussians, &mut output).unwrap();

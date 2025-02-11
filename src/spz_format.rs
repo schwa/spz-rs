@@ -5,9 +5,9 @@ use flate2::Compression;
 use itertools;
 use std::fs::File;
 use std::io::{Seek, Write};
-use std::path::PathBuf;
+use std::path::Path;
 use std::vec;
-use vek::{Vec3, Vec4};
+use vek::{Quaternion, Vec3};
 
 use crate::fixedpoint24::{compute_fixed_point_fractional_bits, FixedPoint24};
 use crate::spherical_harmonics::{SphericalHarmonics, SphericalHarmonicsOrder};
@@ -137,8 +137,8 @@ pub fn write_spz_to_stream<W: Write>(
     let mut rotation_data = Vec::new();
     for gaussian in gaussians {
         let q = &gaussian.rotation.normalized();
-        for &v in q {
-            let v = v * if q[3] < 0.0 { -127.5 } else { 127.5 };
+        for v in q.into_vec3() {
+            let v = v * if q.w < 0.0 { -127.5 } else { 127.5 };
             let v = v + 127.5;
             rotation_data.push(v as u8);
         }
@@ -162,7 +162,7 @@ pub fn write_spz_to_stream<W: Write>(
 
 pub fn write_spz(
     gaussians: Vec<UnpackedGaussian>,
-    path: &PathBuf,
+    path: &Path,
     compressed: bool,
     omit_spherical_harmonics: bool,
 ) -> Result<()> {
@@ -178,7 +178,7 @@ pub fn write_spz(
     Ok(())
 }
 
-pub fn load_spz(path: &PathBuf, compressed: bool) -> Result<Vec<UnpackedGaussian>> {
+pub fn load_spz(path: &Path, compressed: bool) -> Result<Vec<UnpackedGaussian>> {
     let mut file = File::open(path)?;
     let mut reader = std::io::BufReader::new(&file);
     let gaussians = if !compressed {
@@ -191,7 +191,7 @@ pub fn load_spz(path: &PathBuf, compressed: bool) -> Result<Vec<UnpackedGaussian
     if file.stream_position()? != file.metadata()?.len() {
         return Err(anyhow::anyhow!("Did not consume all of file."));
     }
-    return Ok(gaussians);
+    Ok(gaussians)
 }
 
 fn load_spz_from_stream(file: &mut dyn std::io::Read) -> Result<Vec<UnpackedGaussian>> {
@@ -257,7 +257,7 @@ fn load_spz_from_stream(file: &mut dyn std::io::Read) -> Result<Vec<UnpackedGaus
         .map(|v| {
             let xyz = Vec3::new(v[0], v[1], v[2]) * 1.0 / 127.5 + Vec3::new(-1.0, -1.0, -1.0);
             let w = f32::max(0.0, 1.0 - xyz.dot(xyz)).sqrt();
-            Vec4::new(xyz[0], xyz[1], xyz[2], w)
+            Quaternion::from_xyzw(xyz[0], xyz[1], xyz[2], w)
         })
         .collect::<Vec<_>>();
     drop(rotation_data);
@@ -272,8 +272,7 @@ fn load_spz_from_stream(file: &mut dyn std::io::Read) -> Result<Vec<UnpackedGaus
             .chunks(scalar_count)
             .map(|chunk| SphericalHarmonics::from_spz_bytes(chunk.to_vec()))
             .collect::<Vec<_>>()
-    }
-    else {
+    } else {
         vec![SphericalHarmonics::default(); header.num_points as usize]
     };
 
@@ -354,7 +353,7 @@ mod tests {
     fn test_spz() {
         let gaussian = UnpackedGaussian {
             position: Vec3::new(100.0, 200.0, -100.0),
-            rotation: Vec4::new(0.0, 0.0, 0.0, 1.0),
+            rotation: Quaternion::identity(),
             scales: Vec3::new(1.0, 2.0, 1.0),
             color: Vec3::new(1.0, 0.5, 0.25),
             alpha: 0.95,
@@ -370,10 +369,10 @@ mod tests {
         let result = &result[0];
         assert!(gaussian.position == result.position);
         assert!(gaussian.scales == result.scales);
-        assert_relative_eq!(gaussian.rotation[0], result.rotation[0], epsilon = 1e-2);
-        assert_relative_eq!(gaussian.rotation[1], result.rotation[1], epsilon = 1e-2);
-        assert_relative_eq!(gaussian.rotation[2], result.rotation[2], epsilon = 1e-2);
-        assert_relative_eq!(gaussian.rotation[3], result.rotation[3], epsilon = 1e-2);
+        assert_relative_eq!(gaussian.rotation.x, result.rotation.x, epsilon = 1e-2);
+        assert_relative_eq!(gaussian.rotation.y, result.rotation.y, epsilon = 1e-2);
+        assert_relative_eq!(gaussian.rotation.z, result.rotation.z, epsilon = 1e-2);
+        assert_relative_eq!(gaussian.rotation.w, result.rotation.w, epsilon = 1e-2);
         assert_relative_eq!(gaussian.color[0], result.color[0], epsilon = 1e-1);
         assert_relative_eq!(gaussian.color[1], result.color[1], epsilon = 1e-1);
         assert_relative_eq!(gaussian.color[2], result.color[2], epsilon = 1e-1);
@@ -393,10 +392,10 @@ mod tests {
         let gaussian = &gaussians[0];
         assert!(gaussian.position == Vec3::new(100.0, 200.0, -100.0));
         assert!(gaussian.scales == Vec3::new(1.0, -1.0, 1.0));
-        assert_relative_eq!(gaussian.rotation[0], 0.0, epsilon = 1e-2);
-        assert_relative_eq!(gaussian.rotation[1], 0.0, epsilon = 1e-2);
-        assert_relative_eq!(gaussian.rotation[2], 1.0, epsilon = 1e-2);
-        assert_relative_eq!(gaussian.rotation[3], 0.0, epsilon = 1e-2);
+        assert_relative_eq!(gaussian.rotation.x, 0.0, epsilon = 1e-2);
+        assert_relative_eq!(gaussian.rotation.y, 0.0, epsilon = 1e-2);
+        assert_relative_eq!(gaussian.rotation.z, 0.0, epsilon = 1e-2);
+        assert_relative_eq!(gaussian.rotation.w, 1.0, epsilon = 1e-2);
         assert_relative_eq!(gaussian.alpha, 0.95, epsilon = 1e-2);
         assert_relative_eq!(gaussian.color[0], 1.0, epsilon = 1e-2);
         assert_relative_eq!(gaussian.color[1], 0.5, epsilon = 1e-2);
@@ -411,5 +410,3 @@ mod tests {
             .collect::<Vec<_>>()
     }
 }
-
-//
