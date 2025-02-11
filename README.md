@@ -1,8 +1,16 @@
 # spz-rs
 
-A Rust library for reading and writing the Niantic Labs Splat Point Cloud format <https://github.com/nianticlabs/spz/>.
+A Rust library for reading and writing the Niantic Labs Gaussian Splat Point Cloud format <https://github.com/nianticlabs/spz/>.
+
+## Current Status
+
+Spherical harmonics are not yet supported. Limited testing against Niantics original implementation has been done.
+
+This library has an accompanying CLI tool for converting `.ply` files (using the most common Gaussian Splat Point Cloud format) to `.spz` files.
 
 ## File Format
+
+The file format is not currently well documented by Niantic. The following is based on their original implementation.
 
 gz compressed file with the extension `.spz`.
 
