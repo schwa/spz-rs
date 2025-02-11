@@ -80,7 +80,7 @@ impl SphericalHarmonics {
 
     pub fn reorder(&mut self, order: SphericalHarmonicsOrder) {
         let mut values = self.values();
-        values.resize(order as usize, Vec3::zero());
+        values.resize(order.vector_count(), Vec3::zero());
 
         self.set_values(values);
     }
@@ -162,22 +162,22 @@ mod test {
     fn test_spherical_harmonics() {
         let mut sh = SphericalHarmonics::default();
         assert!(sh.order() == SphericalHarmonicsOrder::Order0);
-        assert!(sh.order().index() == 0);
+        assert!(sh.order().vector_count() == 0);
         assert!(sh.values().is_empty());
 
         sh.reorder(SphericalHarmonicsOrder::Order1);
         assert!(sh.order() == SphericalHarmonicsOrder::Order1);
-        assert!(sh.order().index() == 3);
+        assert!(sh.order().vector_count() == 3);
         assert!(sh.values() == vec![Vec3::zero(); 3]);
 
         sh.reorder(SphericalHarmonicsOrder::Order2);
         assert!(sh.order() == SphericalHarmonicsOrder::Order2);
-        assert!(sh.order().index() == 8);
+        assert!(sh.order().vector_count() == 8);
         assert!(sh.values() == vec![Vec3::zero(); 8]);
 
         sh.reorder(SphericalHarmonicsOrder::Order1);
         assert!(sh.order() == SphericalHarmonicsOrder::Order1);
-        assert!(sh.order().index() == 3);
+        assert!(sh.order().vector_count() == 3);
         assert!(sh.values() == vec![Vec3::zero(); 3]);
 
         sh = SphericalHarmonics::Order1([
@@ -186,7 +186,7 @@ mod test {
             Vec3::new(7.0, 8.0, 9.0),
         ]);
         assert!(sh.order() == SphericalHarmonicsOrder::Order1);
-        assert!(sh.order().index() == 3);
+        assert!(sh.order().vector_count() == 3);
         assert!(
             sh.values()
                 == vec![
@@ -198,7 +198,7 @@ mod test {
 
         sh.reorder(SphericalHarmonicsOrder::Order2);
         assert!(sh.order() == SphericalHarmonicsOrder::Order2);
-        assert!(sh.order().index() == 8);
+        assert!(sh.order().vector_count() == 8);
         assert!(
             sh.values()[..3]
                 == vec![
@@ -210,7 +210,7 @@ mod test {
 
         sh.reorder(SphericalHarmonicsOrder::Order1);
         assert!(sh.order() == SphericalHarmonicsOrder::Order1);
-        assert!(sh.order().index() == 3);
+        assert!(sh.order().vector_count() == 3);
         assert!(
             sh.values()
                 == vec![
@@ -228,7 +228,7 @@ mod test {
             sh.extend_scalar(n, n as f32);
         }
         assert!(sh.order() == SphericalHarmonicsOrder::Order3);
-        assert!(sh.order().index() == 15);
+        assert!(sh.order().vector_count() == 15);
         assert!(
             sh.values()
                 == vec![
