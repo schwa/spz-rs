@@ -8,8 +8,9 @@ use std::path::PathBuf;
 use std::vec;
 use vek::{Vec3, Vec4};
 
-use crate::support::{compute_fixed_point_fractional_bits, inv_sigmoid, sigmoid, FixedPoint24};
+use crate::support::{inv_sigmoid, sigmoid};
 use crate::unpacked_gaussian::UnpackedGaussian;
+use crate::fixedpoint24::{FixedPoint24, compute_fixed_point_fractional_bits};
 
 const COLOR_SCALE: f32 = 0.15;
 
@@ -154,19 +155,7 @@ pub fn write_spz_to_stream<W: Write>(
     drop(rotation_data);
 
     if !skip_spherical_harmonics {
-        unimplemented!();
-        // let mut sh_data = Vec::new();
-        // for gaussian in gaussians {
-        //     for sh in &gaussian.spherical_harmonics {
-        //         for &v in sh {
-        //             let v = (v * 127.0 + 128.0) as u8;
-        //             sh_data.push(v);
-        //         }
-        //     }
-        // }
-        // assert!(sh_data.len() == gaussians.len() * sh_count * 3);
-        // stream.write_all(&sh_data)?;
-        // drop(sh_data);
+        unimplemented!("Spherical harmonics are not implemented yet");
     }
 
     Ok(())

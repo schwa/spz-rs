@@ -23,7 +23,7 @@ enum Commands {
         /// Do not compress the output. This option will not produce a valid .spz file.
         uncompressed: bool,
 
-        #[arg(short, long, default_value = "false")]
+        #[arg(short, long, default_value = "true")]
         /// Do not include spherical harmonics in the output.
         skip_spherical_harmonics: bool,
 

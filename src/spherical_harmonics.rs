@@ -1,5 +1,12 @@
 // TODO: Currently WIP
 
+enum SphericalHarmonicsOrder {
+    Order0,
+    Order1,
+    Order2,
+    Order3,
+}
+
 #[derive(Debug, Clone, Copy)]
 enum SphericalHarmonics {
     Order0(()),
@@ -31,11 +38,4 @@ impl SphericalHarmonics {
         };
         return new;
     }
-}
-
-enum SphericalHarmonicsOrder {
-    Order0,
-    Order1,
-    Order2,
-    Order3,
 }
