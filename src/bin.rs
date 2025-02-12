@@ -5,7 +5,8 @@ use clap::{Parser, Subcommand, ValueEnum};
 use hilbert_curve::hilbert_sort;
 use ply_format::{load_ply, write_ply};
 use spz::{unpacked_gaussian::UnpackedGaussian, *};
-use spz_format::{load_spz, write_spz};
+use spz_format::write_spz;
+use spzreader::*;
 use std::path::{Path, PathBuf};
 
 #[derive(Subcommand)]
@@ -19,6 +20,9 @@ enum Commands {
         #[arg(value_name = "OUTPUT")]
         /// The output .spz file
         output: PathBuf,
+
+        #[arg(short, long)]
+        limit: Option<usize>,
 
         #[arg(short, long)]
         /// Do not compress the output. This option will not produce a valid .spz file.
@@ -56,6 +60,8 @@ enum Commands {
         old: PathBuf,
         #[arg(value_name = "NEW")]
         new: PathBuf,
+        #[arg(short, long)]
+        limit: Option<usize>,
     },
 }
 
@@ -74,6 +80,7 @@ fn main() {
         Commands::Convert {
             input,
             output,
+            limit,
             uncompressed,
             omit_spherical_harmonics,
             use_hilbert_sort,
@@ -81,6 +88,7 @@ fn main() {
             convert(
                 &input,
                 &output,
+                limit,
                 uncompressed,
                 omit_spherical_harmonics,
                 use_hilbert_sort,
@@ -99,8 +107,8 @@ fn main() {
             dump(&input, limit, format).unwrap();
         }
 
-        Commands::Diff { old, new } => {
-            diff(&old, &new, None).unwrap();
+        Commands::Diff { old, new, limit } => {
+            diff(&old, &new, limit).unwrap();
         }
     }
 }
@@ -108,11 +116,15 @@ fn main() {
 fn convert(
     input: &Path,
     output: &Path,
+    limit: Option<usize>,
     uncompressed: bool,
     omit_spherical_harmonics: bool,
     use_hilbert_sort: bool,
 ) -> Result<()> {
     let mut gaussians = load(input)?;
+    if let Some(limit) = limit {
+        gaussians.truncate(limit);
+    }
     if use_hilbert_sort {
         gaussians = hilbert_sort(&gaussians, |g| g.position);
     }
@@ -127,16 +139,7 @@ fn convert(
 
 fn info(input: &Path) -> Result<()> {
     let mut info = Vec::<String>::new();
-    let extension = input
-        .extension()
-        .and_then(|s| s.to_str())
-        .ok_or(anyhow::anyhow!("No extension"))?;
-    let gaussians: Option<Vec<UnpackedGaussian>> = match extension {
-        "spz" => load_spz(input, true).ok(),
-        "ply" => load_ply(input).ok(),
-        _ => panic!("Unsupported file extension"),
-    };
-    let gaussians = gaussians.ok_or(anyhow::anyhow!("Failed to load file"))?;
+    let gaussians = load(input)?;
     info.push(format!("Number of gaussians: {}", gaussians.len()));
     println!("{}", info.join("\n"));
     Ok(())
@@ -181,7 +184,13 @@ fn load(input: &Path) -> Result<Vec<UnpackedGaussian>> {
         .and_then(|s| s.to_str())
         .ok_or(anyhow::anyhow!("No extension"))?;
     match extension {
-        "spz" => load_spz(input, true),
+        "spz" => {
+            let mut reader = SPZReader::new_from_path(
+                input,
+                SPZReaderOptions::default(),
+            )?;
+            reader.read()
+        }
         "ply" => load_ply(input),
         _ => panic!("Unsupported file extension"),
     }
@@ -210,8 +219,13 @@ fn save(gaussians: Vec<UnpackedGaussian>, output: &Path, options: &SaveOptions) 
 }
 
 fn diff(old: &Path, new: &Path, limit: Option<usize>) -> Result<()> {
-    let old = load(old)?;
-    let new = load(new)?;
+    let mut old = load(old)?;
+    let mut new = load(new)?;
+
+    if let Some(limit) = limit {
+        old.truncate(limit);
+        new.truncate(limit);
+    }
 
     if old.len() != new.len() {
         println!(
@@ -242,9 +256,8 @@ fn side_by_side(left: &str, right: &str) -> String {
     let left = left.lines();
     let left_max_len = left.clone().map(|l| l.len()).max().unwrap_or(0);
     let right = right.lines();
-    
-    left
-        .zip(right)
+
+    left.zip(right)
         .map(|(l, r)| format!("{:<width$} | {}", l, r, width = left_max_len))
         .collect::<Vec<_>>()
         .join("\n")

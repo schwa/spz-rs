@@ -2,7 +2,7 @@ use crate::spherical_harmonics::SphericalHarmonics;
 use serde::{Deserialize, Serialize};
 use vek::{Quaternion, Vec3};
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize, Default)]
 pub struct UnpackedGaussian {
     pub position: Vec3<f32>,
     pub rotation: Quaternion<f32>,

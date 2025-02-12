@@ -237,10 +237,7 @@ end_header
         let gaussians = load_ply_stream(&mut stream).unwrap();
         assert_eq!(gaussians.len(), 1);
         assert_eq!(gaussians[0].position, Vec3::new(100.0, 200.0, -100.0));
-        assert_eq!(
-            gaussians[0].color,
-            Vec3::new(1.0, 0.5, 0.25)
-        );
+        assert_eq!(gaussians[0].color, Vec3::new(1.0, 0.5, 0.25));
         assert_eq!(gaussians[0].alpha, 0.95);
         assert_eq!(gaussians[0].scales, Vec3::new(1.0, -1.0, 1.0));
         assert_eq!(
