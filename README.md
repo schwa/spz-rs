@@ -4,7 +4,7 @@ A Rust library for reading and writing the Niantic Labs Gaussian Splat Point Clo
 
 ## Current Status
 
-Spherical harmonics are not yet supported. Limited testing against Niantics original implementation has been done.
+Limited testing against Niantics original implementation has been done. There is current *no guarantee* that this library will work with all `.spz` files (yet).
 
 This library has an accompanying CLI tool for converting `.ply` files (using the most common Gaussian Splat Point Cloud format) to `.spz` files.
 
