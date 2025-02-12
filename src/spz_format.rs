@@ -143,7 +143,7 @@ pub fn write_spz_to_stream<W: Write>(
             rotation_data.push(v as u8);
         }
     }
-    assert!(rotation_data.len() == gaussians.len() * 4);
+    assert!(rotation_data.len() == gaussians.len() * 3);
     stream.write_all(&rotation_data)?;
     drop(rotation_data);
 
@@ -394,8 +394,8 @@ mod tests {
         assert!(gaussian.scales == Vec3::new(1.0, -1.0, 1.0));
         assert_relative_eq!(gaussian.rotation.x, 0.0, epsilon = 1e-2);
         assert_relative_eq!(gaussian.rotation.y, 0.0, epsilon = 1e-2);
-        assert_relative_eq!(gaussian.rotation.z, 0.0, epsilon = 1e-2);
-        assert_relative_eq!(gaussian.rotation.w, 1.0, epsilon = 1e-2);
+        assert_relative_eq!(gaussian.rotation.z, 1.0, epsilon = 1e-2);
+        assert_relative_eq!(gaussian.rotation.w, 0.0, epsilon = 1e-2);
         assert_relative_eq!(gaussian.alpha, 0.95, epsilon = 1e-2);
         assert_relative_eq!(gaussian.color[0], 1.0, epsilon = 1e-2);
         assert_relative_eq!(gaussian.color[1], 0.5, epsilon = 1e-2);

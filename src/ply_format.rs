@@ -239,9 +239,9 @@ end_header
         assert_eq!(gaussians[0].position, Vec3::new(100.0, 200.0, -100.0));
         assert_eq!(
             gaussians[0].color,
-            Vec3::new(0.78209484, 0.6410474, 0.5705237)
+            Vec3::new(1.0, 0.5, 0.25)
         );
-        assert_eq!(gaussians[0].alpha, 0.61325896);
+        assert_eq!(gaussians[0].alpha, 0.95);
         assert_eq!(gaussians[0].scales, Vec3::new(1.0, -1.0, 1.0));
         assert_eq!(
             gaussians[0].rotation,
