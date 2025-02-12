@@ -23,7 +23,7 @@ pub struct SPZReaderOptions {
 impl SPZReaderOptions {
     pub fn new(skip_compression: bool) -> Self {
         Self {
-            skip_compression: skip_compression,
+            skip_compression,
         }
     }
 
@@ -72,7 +72,7 @@ impl<'a> SPZReader<'a> {
     pub fn read_header(&mut self) -> Result<SPZHeader> {
         let mut header_bytes = [0; std::mem::size_of::<SPZHeader>()];
         self.reader.my_read_exact(&mut header_bytes)?;
-        let header = SPZHeader::from_bytes(&header_bytes)?;
+        let header: SPZHeader = *bytemuck::from_bytes(&header_bytes);
         if !header.is_valid() {
             return Err(anyhow::anyhow!("Invalid header"));
         }

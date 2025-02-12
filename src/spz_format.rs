@@ -7,7 +7,7 @@ use std::io::Write;
 use std::path::Path;
 use std::vec;
 
-use crate::spherical_harmonics::SphericalHarmonics;
+use crate::spherical_harmonics::{SphericalHarmonics, SphericalHarmonicsOrder};
 use crate::spzwriter::*;
 use crate::unpacked_gaussian::UnpackedGaussian;
 
@@ -26,18 +26,6 @@ pub struct SPZHeader {
 }
 
 impl SPZHeader {
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        Ok(Self {
-            magic: u32::from_le_bytes(bytes[0..4].try_into()?),
-            version: u32::from_le_bytes(bytes[4..8].try_into()?),
-            num_points: u32::from_le_bytes(bytes[8..12].try_into()?),
-            sh_degree: bytes[12],
-            fractional_bits: bytes[13],
-            flags: bytes[14],
-            reserved: bytes[15],
-        })
-    }
-
     pub fn is_valid(&self) -> bool {
         self.magic == 0x5053474e && self.version == 2 && self.sh_degree <= 3
     }
@@ -54,20 +42,18 @@ impl SPZHeader {
         }
     }
 
-    pub fn uncompressed_size(&self) -> usize {
-
+    pub fn expected_uncompressed_size(&self) -> usize {
         let header_size = std::mem::size_of::<SPZHeader>();
         let position_size = 3 * 3;
         let alpha_size = 1;
         let color_size = 3;
         let scale_size = 3;
         let rotation_size = 3;
-        let sh_size = (self.sh_degree as usize + 1) * (self.sh_degree as usize + 1) * 3;
-
-        let size_per_point = position_size + alpha_size + color_size + scale_size + rotation_size + sh_size;
-        return header_size + size_per_point * self.num_points as usize;
-
-
+        let order = SphericalHarmonicsOrder::order_for_degree(self.sh_degree).unwrap();
+        let sh_size = order.scalar_count();
+        let size_per_point =
+            position_size + alpha_size + color_size + scale_size + rotation_size + sh_size;
+        header_size + size_per_point * self.num_points as usize
     }
 }
 
@@ -166,11 +152,12 @@ mod tests {
         };
 
         let mut buffer = Vec::new();
-        write_spz_to_stream(&vec![gaussian.clone()], &mut buffer, true).unwrap();
+        write_spz_to_stream(&vec![gaussian], &mut buffer, true).unwrap();
 
-        let result = SPZReader::new_from_slice(&buffer, SPZReaderOptions::default().skip_compression(true))
-            .read()
-            .unwrap();
+        let result =
+            SPZReader::new_from_slice(&buffer, SPZReaderOptions::default().skip_compression(true))
+                .read()
+                .unwrap();
         assert!(result.len() == 1);
         let result = &result[0];
         gaussian_approx_eq(&gaussian, result);
@@ -183,9 +170,10 @@ mod tests {
         let hex = "4E475350 02000000 01000000 000C0000 00400600 800C00C0 F9B8A693 89B090B0 8080FF";
         let bytes = dehex(hex);
 
-        let gaussians = SPZReader::new_from_slice(&bytes, SPZReaderOptions::default().skip_compression(true))
-            .read()
-            .unwrap();
+        let gaussians =
+            SPZReader::new_from_slice(&bytes, SPZReaderOptions::default().skip_compression(true))
+                .read()
+                .unwrap();
         assert!(gaussians.len() == 1);
         let gaussian = &gaussians[0];
         assert!(gaussian.position == Vec3::new(100.0, 200.0, -100.0));
@@ -313,17 +301,16 @@ mod tests {
         };
 
         let mut buffer = Vec::new();
-        let gaussians = vec![gaussian.clone()];
+        let gaussians = vec![gaussian];
         write_spz_to_stream(&gaussians, &mut buffer, false).unwrap();
-
         let options = SPZReaderOptions::default().skip_compression(true);
         let mut reader = SPZReader::new_from_slice(&buffer, options);
         let header = reader.read_header().unwrap();
+        assert!(header.expected_uncompressed_size() == buffer.len());
         let result = reader.read_gaussians().unwrap()[0];
         assert!(gaussian.position == result.position);
         assert!(gaussian.scales == result.scales);
         gaussian_approx_eq(&gaussian, &result);
-
     }
 
     fn gaussian_approx_eq(left: &UnpackedGaussian, right: &UnpackedGaussian) {
@@ -339,5 +326,4 @@ mod tests {
         assert_relative_eq!(left.alpha, right.alpha, epsilon = 1e-1);
         assert!(left.spherical_harmonics == right.spherical_harmonics);
     }
-
 }

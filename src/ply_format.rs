@@ -1,3 +1,4 @@
+use crate::unpacked_gaussian::UnpackedGaussian;
 use anyhow::Result;
 use ply_rs::parser;
 use ply_rs::ply;
@@ -8,21 +9,10 @@ use ply_rs::ply::{
 use ply_rs::writer::Writer;
 use std::io::{BufRead, Write};
 use std::path::Path;
-use vek::{Quaternion, Vec3};
-
-use crate::spherical_harmonics::SphericalHarmonics;
-use crate::unpacked_gaussian::UnpackedGaussian;
 
 impl ply::PropertyAccess for UnpackedGaussian {
     fn new() -> Self {
-        Self {
-            position: Vec3::zero(),
-            rotation: Quaternion::identity(),
-            scales: Vec3::one(),
-            color: Vec3::zero(),
-            alpha: 0.0,
-            spherical_harmonics: SphericalHarmonics::default(),
-        }
+        UnpackedGaussian::default()
     }
 
     fn set_property(&mut self, property_name: String, property: ply::Property) {
@@ -209,6 +199,7 @@ pub fn write_ply(gaussians: &Vec<UnpackedGaussian>, path: &Path) -> Result<()> {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use vek::{Quaternion, Vec3};
 
     #[test]
     fn test_ply_load_save() {

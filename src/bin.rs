@@ -7,7 +7,9 @@ use ply_format::{load_ply, write_ply};
 use spz::{unpacked_gaussian::UnpackedGaussian, *};
 use spz_format::write_spz;
 use spzreader::*;
+use core::f32;
 use std::path::{Path, PathBuf};
+use vek::Vec3;
 
 #[derive(Subcommand)]
 enum Commands {
@@ -138,10 +140,23 @@ fn convert(
 }
 
 fn info(input: &Path) -> Result<()> {
-    let mut info = Vec::<String>::new();
-    let gaussians = load(input)?;
-    info.push(format!("Number of gaussians: {}", gaussians.len()));
-    println!("{}", info.join("\n"));
+
+    let mut reader = SPZReader::new_from_path(input, SPZReaderOptions::default())?;
+
+    let header = reader.read_header()?;
+    let gaussians = reader.read_gaussians()?;
+    println!("{:#?}", header);
+
+    // compute bounding box for all gaussians positions
+    let mut min = Vec3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY);
+    let mut max = Vec3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY);
+    for g in gaussians.iter() {
+        min = Vec3::partial_min(min, g.position);
+        max = Vec3::partial_max(max, g.position);
+    }
+    println!("Bounding box: min: {}, max: {}", min, max);
+    println!("Center: {}", (min + max) / 2.0);
+
     Ok(())
 }
 
@@ -185,10 +200,7 @@ fn load(input: &Path) -> Result<Vec<UnpackedGaussian>> {
         .ok_or(anyhow::anyhow!("No extension"))?;
     match extension {
         "spz" => {
-            let mut reader = SPZReader::new_from_path(
-                input,
-                SPZReaderOptions::default(),
-            )?;
+            let mut reader = SPZReader::new_from_path(input, SPZReaderOptions::default())?;
             reader.read()
         }
         "ply" => load_ply(input),

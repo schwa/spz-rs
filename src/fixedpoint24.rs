@@ -43,25 +43,25 @@ impl FixedPoint24 {
         Self(value)
     }
 
-    fn optimal_fractional_bits(&self) -> Option<usize> {
+    fn optimal_fractional_bits(&self) -> usize {
         let value = self.0;
-        if value == 0.0 || value.floor() == value {
-            return Some(0);
+        if value == 0.0 {
+            return 0;
         }
         let value = value.abs().ceil();
         let bits = value.log2().ceil() as usize;
-        Some(24 - bits - 1)
+        24 - bits - 1
     }
 }
 
 // Given an array of floats and the desired bit_count work out the ideal number of fractional bits needed to represent the floats with as much precision as possible.
 pub(crate) fn compute_fixed_point_fractional_bits(floats: &[f32], bit_count: usize) -> usize {
-    floats
-        .iter()
-        .map(|v| FixedPoint24::new(*v).optimal_fractional_bits().unwrap_or(0))
-        .min()
-        .unwrap_or(0)
-        .min(bit_count)
+    assert!(bit_count == 24);
+    let max = floats.iter().map(|v| v.abs().ceil()).max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(0.0);
+    println!("Max: {}", max);
+    return FixedPoint24::new(max).optimal_fractional_bits();
+
+
 }
 
 #[cfg(test)]
@@ -71,14 +71,17 @@ mod tests {
 
     #[test]
     fn test_fraction_bits() {
-        assert_eq!(FixedPoint24::new(0.0).optimal_fractional_bits(), Some(0));
-        assert_eq!(FixedPoint24::new(1.0).optimal_fractional_bits(), Some(0));
-        assert_eq!(FixedPoint24::new(1.5).optimal_fractional_bits(), Some(22));
-        assert_eq!(FixedPoint24::new(-1.0).optimal_fractional_bits(), Some(0));
-        assert_eq!(FixedPoint24::new(-1.5).optimal_fractional_bits(), Some(22));
-        assert_eq!(FixedPoint24::new(100.0).optimal_fractional_bits(), Some(0));
-        assert_eq!(FixedPoint24::new(100.5).optimal_fractional_bits(), Some(16));
-        assert_eq!(FixedPoint24::new(-105.12345).optimal_fractional_bits(), Some(16));
+        assert_eq!(FixedPoint24::new(0.0).optimal_fractional_bits(), 0);
+        assert_eq!(FixedPoint24::new(1.0).optimal_fractional_bits(), 23);
+        assert_eq!(FixedPoint24::new(1.5).optimal_fractional_bits(), 22);
+        assert_eq!(FixedPoint24::new(-1.0).optimal_fractional_bits(), 23);
+        assert_eq!(FixedPoint24::new(-1.5).optimal_fractional_bits(), 22);
+        assert_eq!(FixedPoint24::new(100.0).optimal_fractional_bits(), 16);
+        assert_eq!(FixedPoint24::new(100.5).optimal_fractional_bits(), 16);
+        assert_eq!(
+            FixedPoint24::new(-105.12345).optimal_fractional_bits(),
+            16
+        );
     }
 
     #[test]
@@ -176,18 +179,19 @@ mod tests {
 
     #[test]
     fn test_compute_fixed_point_fractional_bits() {
-        let floats = vec![
-            -105.086426,
-            170.979,
-            1.3356934,
-        ];
+        let floats = vec![-105.086426, 170.979, 1.3356934];
 
         let fractional_bits = compute_fixed_point_fractional_bits(&floats, 24);
-        assert!(fractional_bits == 15);
+        assert_eq!(fractional_bits, 15);
 
-        let fixed = floats.iter().map(|v| FixedPoint24::new(*v).into(fractional_bits)).collect::<Vec<_>>();
-        let result = fixed.iter().map(|v| FixedPoint24::from(*v, fractional_bits).0).collect::<Vec<_>>();
-
+        let fixed = floats
+            .iter()
+            .map(|v| FixedPoint24::new(*v).into(fractional_bits))
+            .collect::<Vec<_>>();
+        let result = fixed
+            .iter()
+            .map(|v| FixedPoint24::from(*v, fractional_bits).0)
+            .collect::<Vec<_>>();
 
         assert_relative_eq!(result[0], floats[0], epsilon = 1e-3);
         assert_relative_eq!(result[1], floats[1], epsilon = 1e-3);
