@@ -38,7 +38,7 @@ enum Commands {
         /// Sort the gaussians using a hilbert curve. This may improve compression. Experimental.
         use_hilbert_sort: bool,
 
-        #[arg(short, long, default_value="binary-big-endian")]
+        #[arg(short, long, default_value = "binary-big-endian")]
         ply_encoding: PlyEncoding,
     },
 
@@ -73,8 +73,7 @@ enum Commands {
         #[arg(value_name = "INPUT")]
         /// The input .spz file
         input: PathBuf,
-
-    }
+    },
 }
 
 #[derive(Parser)]
@@ -296,7 +295,7 @@ fn side_by_side(left: &str, right: &str) -> String {
 
 fn validate(input: &Path) -> Result<()> {
     let gaussians = load(input)?;
-    for (index,g) in gaussians.iter().enumerate() {
+    for (index, g) in gaussians.iter().enumerate() {
         if !g.is_valid() {
             println!("Invalid gaussian at index {}\n\t{:?}", index, g);
         }

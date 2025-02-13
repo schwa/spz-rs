@@ -30,24 +30,37 @@ impl Default for UnpackedGaussian {
 }
 
 impl UnpackedGaussian {
-
     fn scalars(&self) -> vec::Vec<f32> {
-        let mut scalars = vec![self.position.x, self.position.y, self.position.z, self.rotation.x, self.rotation.y, self.rotation.z, self.rotation.w, self.scales.x, self.scales.y, self.scales.z, self.color.x, self.color.y, self.color.z, self.alpha];
+        let mut scalars = vec![
+            self.position.x,
+            self.position.y,
+            self.position.z,
+            self.rotation.x,
+            self.rotation.y,
+            self.rotation.z,
+            self.rotation.w,
+            self.scales.x,
+            self.scales.y,
+            self.scales.z,
+            self.color.x,
+            self.color.y,
+            self.color.z,
+            self.alpha,
+        ];
         scalars.extend(self.spherical_harmonics.scalars());
         return scalars;
-
     }
 
     pub fn is_valid(&self) -> bool {
         let scalars = self.scalars();
         for scalar in scalars.iter() {
             if scalar.is_nan() {
-                return false
+                return false;
             }
             if !scalar.is_finite() {
-                return false
+                return false;
             }
         }
-        return true
+        return true;
     }
 }

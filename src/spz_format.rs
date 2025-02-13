@@ -6,6 +6,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::vec;
+use vek::{Quaternion, Vec3};
 
 use crate::spherical_harmonics::{SphericalHarmonics, SphericalHarmonicsOrder};
 use crate::spz_writer::*;
@@ -325,5 +326,102 @@ mod tests {
         assert_relative_eq!(left.color[2], right.color[2], epsilon = 1e-1);
         assert_relative_eq!(left.alpha, right.alpha, epsilon = 1e-1);
         assert!(left.spherical_harmonics == right.spherical_harmonics);
+    }
+}
+
+pub fn encode(v: f32, min: f32, max: f32) -> u8 {
+    assert!(v >= min && v <= max);
+    let v = (v - min) / (max - min) * 255.0;
+    v as u8
+}
+
+pub fn decode(v: u8, min: f32, max: f32) -> f32 {
+    let v = v as f32 / 255.0;
+    v * (max - min) + min
+}
+
+#[cfg(test)]
+mod test_encode {
+
+    use super::*;
+    use approx::assert_relative_eq;
+
+    #[test]
+    fn test_encode() {
+        assert_eq!(encode(0.0, 0.0, 1.0), 0);
+        assert_eq!(encode(0.5, 0.0, 1.0), 127);
+        assert_eq!(encode(1.0, 0.0, 1.0), 255);
+        assert_eq!(encode(-1.0, -1.0, 1.0), 0);
+        assert_eq!(encode(-0.5, -1.0, 1.0), 63);
+        assert_eq!(encode(0.0, -1.0, 1.0), 127);
+        assert_eq!(encode(0.5, -1.0, 1.0), 191);
+        assert_eq!(encode(1.0, -1.0, 1.0), 255);
+    }
+
+    #[test]
+    fn test_decode() {
+        assert_relative_eq!(decode(0, 0.0, 1.0), 0.0, epsilon = 1e-2);
+        assert_relative_eq!(decode(127, 0.0, 1.0), 0.5, epsilon = 1e-2);
+        assert_relative_eq!(decode(255, 0.0, 1.0), 1.0, epsilon = 1e-2);
+        assert_relative_eq!(decode(0, -1.0, 1.0), -1.0, epsilon = 1e-2);
+        assert_relative_eq!(decode(63, -1.0, 1.0), -0.5, epsilon = 1e-2);
+        assert_relative_eq!(decode(127, -1.0, 1.0), 0.0, epsilon = 1e-2);
+        assert_relative_eq!(decode(191, -1.0, 1.0), 0.5, epsilon = 1e-2);
+        assert_relative_eq!(decode(255, -1.0, 1.0), 1.0, epsilon = 1e-2);
+    }
+}
+
+#[derive(Debug)]
+pub struct SPZQuaternion(pub [u8; 3]);
+
+impl Into<Quaternion<f32>> for SPZQuaternion {
+    fn into(self) -> Quaternion<f32> {
+        let x = decode(self.0[0], -1.0, 1.0);
+        let y = decode(self.0[1], -1.0, 1.0);
+        let z = decode(self.0[2], -1.0, 1.0);
+        let xyz = Vec3::new(x, y, z);
+        let w = f32::max(0.0, 1.0 - xyz.dot(xyz)).sqrt();
+        println!("*** {:?} {:?}", xyz, w);
+        Quaternion::from_xyzw(xyz[0], xyz[1], xyz[2], w)
+    }
+}
+
+impl From<Quaternion<f32>> for SPZQuaternion {
+    fn from(q: Quaternion<f32>) -> Self {
+        fn convert(v: f32, w: f32) -> u8 {
+            encode(v, -1.0, 1.0)
+        }
+        let q = q.normalized();
+        let x = convert(q.x, q.w);
+        let y = convert(q.y, q.w);
+        let z = convert(q.z, q.w);
+        SPZQuaternion([x, y, z])
+    }
+}
+
+#[cfg(test)]
+mod test_quaternion {
+
+    use super::*;
+    use approx::assert_relative_eq;
+
+    #[test]
+    fn test() {
+        let q = vek::Quaternion::from_xyzw(0.9401622, 0.09101284, -0.03510389, 0.090294436);
+        let spz_q: SPZQuaternion = q.into();
+        let q2: Quaternion<f32> = spz_q.into();
+        assert_relative_eq!(q.normalized().x, q2.x, epsilon = 1e-1);
+        assert_relative_eq!(q.normalized().y, q2.y, epsilon = 1e-1);
+        assert_relative_eq!(q.normalized().z, q2.z, epsilon = 1e-1);
+        assert_relative_eq!(q.normalized().w, q2.w, epsilon = 1e-1);
+
+
+        let q = vek::Quaternion::from_xyzw(1.0344028, -0.19919053, -0.10477345, -0.014542822);
+        let spz_q: SPZQuaternion = q.into();
+        let q2: Quaternion<f32> = spz_q.into();
+        assert_relative_eq!(q.normalized().x, q2.x, epsilon = 1e-1);
+        assert_relative_eq!(q.normalized().y, q2.y, epsilon = 1e-1);
+        assert_relative_eq!(q.normalized().z, q2.z, epsilon = 1e-1);
+        assert_relative_eq!(q.normalized().w, q2.w, epsilon = 1e-1);
     }
 }
