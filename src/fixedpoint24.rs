@@ -57,11 +57,13 @@ impl FixedPoint24 {
 // Given an array of floats and the desired bit_count work out the ideal number of fractional bits needed to represent the floats with as much precision as possible.
 pub(crate) fn compute_fixed_point_fractional_bits(floats: &[f32], bit_count: usize) -> usize {
     assert!(bit_count == 24);
-    let max = floats.iter().map(|v| v.abs().ceil()).max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(0.0);
+    let max = floats
+        .iter()
+        .map(|v| v.abs().ceil())
+        .max_by(|a, b| a.partial_cmp(b).unwrap())
+        .unwrap_or(0.0);
     println!("Max: {}", max);
-    return FixedPoint24::new(max).optimal_fractional_bits();
-
-
+    FixedPoint24::new(max).optimal_fractional_bits()
 }
 
 #[cfg(test)]
@@ -78,10 +80,7 @@ mod tests {
         assert_eq!(FixedPoint24::new(-1.5).optimal_fractional_bits(), 22);
         assert_eq!(FixedPoint24::new(100.0).optimal_fractional_bits(), 16);
         assert_eq!(FixedPoint24::new(100.5).optimal_fractional_bits(), 16);
-        assert_eq!(
-            FixedPoint24::new(-105.12345).optimal_fractional_bits(),
-            16
-        );
+        assert_eq!(FixedPoint24::new(-105.12345).optimal_fractional_bits(), 16);
     }
 
     #[test]

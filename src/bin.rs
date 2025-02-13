@@ -2,12 +2,12 @@ mod hilbert_curve;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
+use core::f32;
 use hilbert_curve::hilbert_sort;
-use ply_format::{load_ply, write_ply};
+use ply_format::{load_ply, write_ply, PlyEncoding};
 use spz::{unpacked_gaussian::UnpackedGaussian, *};
 use spz_format::write_spz;
 use spzreader::*;
-use core::f32;
 use std::path::{Path, PathBuf};
 use vek::Vec3;
 
@@ -37,6 +37,9 @@ enum Commands {
         #[arg(long, default_value = "false")]
         /// Sort the gaussians using a hilbert curve. This may improve compression. Experimental.
         use_hilbert_sort: bool,
+
+        #[arg(short, long, default_value="binary-big-endian")]
+        ply_encoding: PlyEncoding,
     },
 
     Info {
@@ -86,6 +89,7 @@ fn main() {
             uncompressed,
             omit_spherical_harmonics,
             use_hilbert_sort,
+            ply_encoding,
         } => {
             convert(
                 &input,
@@ -94,6 +98,7 @@ fn main() {
                 uncompressed,
                 omit_spherical_harmonics,
                 use_hilbert_sort,
+                ply_encoding,
             )
             .unwrap();
         }
@@ -122,6 +127,7 @@ fn convert(
     uncompressed: bool,
     omit_spherical_harmonics: bool,
     use_hilbert_sort: bool,
+    ply_encoding: PlyEncoding,
 ) -> Result<()> {
     let mut gaussians = load(input)?;
     if let Some(limit) = limit {
@@ -134,13 +140,13 @@ fn convert(
     let options = SaveOptions {
         compressed: !uncompressed,
         omit_spherical_harmonics,
+        ply_encoding,
     };
     save(gaussians, output, &options)?;
     Ok(())
 }
 
 fn info(input: &Path) -> Result<()> {
-
     let mut reader = SPZReader::new_from_path(input, SPZReaderOptions::default())?;
 
     let header = reader.read_header()?;
@@ -208,9 +214,11 @@ fn load(input: &Path) -> Result<Vec<UnpackedGaussian>> {
     }
 }
 
+#[derive(Debug, Default)]
 struct SaveOptions {
     compressed: bool,
     omit_spherical_harmonics: bool,
+    ply_encoding: PlyEncoding,
 }
 
 fn save(gaussians: Vec<UnpackedGaussian>, output: &Path, options: &SaveOptions) -> Result<()> {
@@ -225,7 +233,7 @@ fn save(gaussians: Vec<UnpackedGaussian>, output: &Path, options: &SaveOptions) 
             options.compressed,
             options.omit_spherical_harmonics,
         ),
-        "ply" => write_ply(&gaussians, output),
+        "ply" => write_ply(&gaussians, output, &options.ply_encoding),
         _ => panic!("Unsupported file extension"),
     }
 }

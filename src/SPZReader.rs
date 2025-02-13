@@ -22,9 +22,7 @@ pub struct SPZReaderOptions {
 
 impl SPZReaderOptions {
     pub fn new(skip_compression: bool) -> Self {
-        Self {
-            skip_compression,
-        }
+        Self { skip_compression }
     }
 
     pub fn skip_compression(mut self, skip: bool) -> Self {

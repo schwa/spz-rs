@@ -1,5 +1,6 @@
 use crate::unpacked_gaussian::UnpackedGaussian;
 use anyhow::Result;
+use clap::ValueEnum;
 use ply_rs::parser;
 use ply_rs::ply;
 use ply_rs::ply::{
@@ -59,10 +60,19 @@ pub fn load_ply_stream<T: BufRead>(stream: &mut T) -> Result<Vec<UnpackedGaussia
     Ok(gaussian_list)
 }
 
-pub fn write_ply_stream<W: Write>(gaussians: &Vec<UnpackedGaussian>, stream: &mut W) -> Result<()> {
+pub fn write_ply_stream<W: Write>(
+    gaussians: &Vec<UnpackedGaussian>,
+    stream: &mut W,
+    encoding: &PlyEncoding,
+) -> Result<()> {
     let mut ply = {
         let mut ply = Ply::<DefaultElement>::new();
-        ply.header.encoding = Encoding::BinaryLittleEndian;
+
+        ply.header.encoding = match encoding {
+            PlyEncoding::Ascii => Encoding::Ascii,
+            PlyEncoding::BinaryBigEndian => Encoding::BinaryBigEndian,
+            PlyEncoding::BinaryLittleEndian => Encoding::BinaryLittleEndian,
+        };
 
         let mut element = ElementDef::new("vertex".to_string());
         element.properties.add(PropertyDef::new(
@@ -133,7 +143,7 @@ pub fn write_ply_stream<W: Write>(gaussians: &Vec<UnpackedGaussian>, stream: &mu
             "f_dc_2".to_string(),
             PropertyType::Scalar(ScalarType::Float),
         ));
-        for i in 0..gaussians[0].spherical_harmonics.order().index() {
+        for i in 0..gaussians[0].spherical_harmonics.order().scalar_count() {
             element.properties.add(PropertyDef::new(
                 format!("f_rest_{}", i).to_string(),
                 PropertyType::Scalar(ScalarType::Float),
@@ -164,11 +174,9 @@ pub fn write_ply_stream<W: Write>(gaussians: &Vec<UnpackedGaussian>, stream: &mu
             record.insert("f_dc_0".to_string(), Property::Float(gaussian.color.x));
             record.insert("f_dc_1".to_string(), Property::Float(gaussian.color.y));
             record.insert("f_dc_2".to_string(), Property::Float(gaussian.color.z));
-
             for (i, v) in gaussian.spherical_harmonics.scalars().iter().enumerate() {
                 record.insert(format!("f_rest_{}", i).to_string(), Property::Float(*v));
             }
-
             records.push(record)
         }
 
@@ -190,9 +198,13 @@ pub fn load_ply(path: &Path) -> Result<Vec<UnpackedGaussian>> {
     load_ply_stream(&mut stream)
 }
 
-pub fn write_ply(gaussians: &Vec<UnpackedGaussian>, path: &Path) -> Result<()> {
+pub fn write_ply(
+    gaussians: &Vec<UnpackedGaussian>,
+    path: &Path,
+    encoding: &PlyEncoding,
+) -> Result<()> {
     let mut file = std::fs::File::create(path)?;
-    write_ply_stream(gaussians, &mut file)
+    write_ply_stream(gaussians, &mut file, encoding)
 }
 
 #[cfg(test)]
@@ -237,10 +249,18 @@ end_header
         );
         assert_eq!(gaussians[0].spherical_harmonics.order().index(), 0);
         let mut output = Vec::new();
-        write_ply_stream(&gaussians, &mut output).unwrap();
+        write_ply_stream(&gaussians, &mut output, &PlyEncoding::Ascii).unwrap();
         let mut stream = std::io::BufReader::new(output.as_slice());
         let result = load_ply_stream(&mut stream).unwrap();
         assert!(gaussians.len() == result.len());
         assert_eq!(gaussians[0], result[0]);
     }
+}
+
+#[derive(Clone, ValueEnum, Default, Debug)]
+pub enum PlyEncoding {
+    Ascii,
+    #[default]
+    BinaryBigEndian,
+    BinaryLittleEndian,
 }
