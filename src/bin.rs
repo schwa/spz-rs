@@ -7,7 +7,7 @@ use hilbert_curve::hilbert_sort;
 use ply_format::{load_ply, write_ply, PlyEncoding};
 use spz::{unpacked_gaussian::UnpackedGaussian, *};
 use spz_format::write_spz;
-use spzreader::*;
+use spz_reader::*;
 use std::path::{Path, PathBuf};
 use vek::Vec3;
 
@@ -68,6 +68,13 @@ enum Commands {
         #[arg(short, long)]
         limit: Option<usize>,
     },
+
+    Validate {
+        #[arg(value_name = "INPUT")]
+        /// The input .spz file
+        input: PathBuf,
+
+    }
 }
 
 #[derive(Parser)]
@@ -116,6 +123,10 @@ fn main() {
 
         Commands::Diff { old, new, limit } => {
             diff(&old, &new, limit).unwrap();
+        }
+
+        Commands::Validate { input } => {
+            validate(&input).unwrap();
         }
     }
 }
@@ -281,4 +292,14 @@ fn side_by_side(left: &str, right: &str) -> String {
         .map(|(l, r)| format!("{:<width$} | {}", l, r, width = left_max_len))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn validate(input: &Path) -> Result<()> {
+    let gaussians = load(input)?;
+    for (index,g) in gaussians.iter().enumerate() {
+        if !g.is_valid() {
+            println!("Invalid gaussian at index {}\n\t{:?}", index, g);
+        }
+    }
+    return Ok(());
 }

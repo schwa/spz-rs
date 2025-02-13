@@ -8,7 +8,7 @@ use std::path::Path;
 use std::vec;
 
 use crate::spherical_harmonics::{SphericalHarmonics, SphericalHarmonicsOrder};
-use crate::spzwriter::*;
+use crate::spz_writer::*;
 use crate::unpacked_gaussian::UnpackedGaussian;
 
 pub(crate) const COLOR_SCALE: f32 = 0.15;
@@ -136,7 +136,7 @@ mod tests {
     use approx::assert_relative_eq;
 
     use super::*;
-    use crate::spzreader::*;
+    use crate::spz_reader::*;
     use crate::unpacked_gaussian::*;
     use vek::{Quaternion, Vec3};
 
